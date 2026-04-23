@@ -14,6 +14,7 @@ interface TransactionStore {
   fetchTransactions: (filters?: { category?: string; from?: string; to?: string; search?: string; page?: number }) => Promise<void>
   updateTransaction: (id: number, data: { category?: TransactionCategory; clientId?: number | null; comment?: string | null }) => Promise<void>
   classifyTransaction: (id: number) => Promise<TransactionCategory>
+  createTransaction: (data: { amount: number; date: string; description: string; category: TransactionCategory; clientId?: number | null; comment?: string | null }) => Promise<Transaction>
 }
 
 export const useTransactionStore = create<TransactionStore>((set, get) => ({
@@ -72,5 +73,33 @@ export const useTransactionStore = create<TransactionStore>((set, get) => ({
     const result = await txApi.classifyTransaction(id)
     await get().updateTransaction(id, { category: result.category })
     return result.category
+  },
+
+  createTransaction: async (data) => {
+    if (USE_MOCK) {
+      const created: Transaction = {
+        id: Date.now(),
+        accountId: 0,
+        externalId: `mock-${Date.now()}`,
+        date: data.date,
+        description: data.description,
+        amount: data.amount,
+        currency: 'UAH',
+        exchangeRate: null,
+        category: data.category,
+        clientId: data.clientId ?? null,
+        comment: data.comment ?? null,
+        createdAt: new Date().toISOString(),
+      }
+      set((state) => ({
+        transactions: [created, ...state.transactions],
+        total: state.total + 1,
+      }))
+      return created
+    }
+
+    const created = await txApi.createTransaction(data)
+    await get().fetchTransactions(get().filters)
+    return created
   },
 }))

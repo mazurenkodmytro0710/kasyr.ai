@@ -14,6 +14,11 @@ export const mockEntrepreneur: Entrepreneur = {
   group: 3,
   regDate: '2022-03-14',
   kveds: ['62.01', '62.02', '74.90'],
+  subscriptionTier: 'free',
+  telegramChatId: null,
+  telegramLinkToken: null,
+  emailNotifications: true,
+  telegramNotifications: false,
 }
 
 export const mockBankAccounts: BankAccount[] = [

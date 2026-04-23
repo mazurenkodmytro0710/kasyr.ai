@@ -4,6 +4,7 @@ import { db } from '../db'
 import { bankAccounts, deadlines, entrepreneurs, transactions } from '../db/schema'
 import { authMiddleware, type AuthRequest } from '../middleware/auth'
 import { calculateTaxes, currentQuarter, getQuarterBounds, type TaxGroup } from '../services/taxService'
+import { getNbuRate } from '../services/nbuRateService'
 
 const router = Router()
 router.use(authMiddleware)
@@ -104,6 +105,8 @@ router.get('/', async (req: AuthRequest, res, next) => {
       .at(-1) ?? null
 
     const taxes = calculateTaxes(entrepreneur.group as TaxGroup, quarterIncome)
+    const todayStr = now.toISOString().slice(0, 10)
+    const usdRate = await getNbuRate('USD', todayStr).catch(() => 41.4)
 
     res.json({
       totalDue: taxes,
@@ -117,7 +120,7 @@ router.get('/', async (req: AuthRequest, res, next) => {
         : null,
       quarterIncome: {
         uah: quarterIncome,
-        usd: Math.round(quarterIncome / 41.4),
+        usd: Math.round(quarterIncome / usdRate),
       },
       monthlyChart: chartMonths,
       recentTransactions,
@@ -126,6 +129,74 @@ router.get('/', async (req: AuthRequest, res, next) => {
         pendingCount,
         lastSyncAt,
       },
+    })
+  } catch (error) {
+    next(error)
+  }
+})
+
+router.get('/income', async (req: AuthRequest, res, next) => {
+  try {
+    const period = String(req.query['period'] ?? '')
+    const isQuarter = /^Q[1-4]-\d{4}$/.test(period)
+    const isYear = /^Y-\d{4}$/.test(period)
+    if (!isQuarter && !isYear) {
+      return res.status(400).json({ error: 'Invalid period' })
+    }
+
+    const [entrepreneur] = await db.select().from(entrepreneurs)
+      .where(eq(entrepreneurs.userId, req.userId!))
+    if (!entrepreneur) return res.json({ uah: 0, txCount: 0 })
+
+    const [, yearString] = period.split('-')
+    const year = parseInt(yearString!)
+    const quarter = isQuarter ? parseInt(period.split('-')[0]!.replace('Q', '')) as 1 | 2 | 3 | 4 : null
+    const { start, end } = quarter
+      ? getQuarterBounds(year, quarter)
+      : {
+        start: new Date(Date.UTC(year, 0, 1)).toISOString(),
+        end: new Date(Date.UTC(year, 11, 31, 23, 59, 59, 999)).toISOString(),
+      }
+
+    const accounts = await db.select().from(bankAccounts)
+      .where(eq(bankAccounts.entrepreneurId, entrepreneur.id))
+    const accountIds = accounts.map(a => a.id)
+
+    if (!accountIds.length) return res.json({ uah: 0, txCount: 0 })
+
+    const txList = await db.select().from(transactions)
+      .where(and(
+        inArray(transactions.accountId, accountIds),
+        gte(transactions.date, start),
+        lte(transactions.date, end),
+        eq(transactions.category, 'income'),
+      ))
+
+    const uah = txList.reduce((sum, t) => sum + t.amount, 0)
+    const monthlyChart = (quarter
+      ? [0, 1, 2].map((offset) => {
+        const monthIndex = (quarter - 1) * 3 + offset
+        return {
+          month: monthLabel(monthIndex),
+          amount: txList
+            .filter((transaction) => new Date(transaction.date).getUTCMonth() === monthIndex)
+            .reduce((sum, transaction) => sum + transaction.amount, 0),
+        }
+      })
+      : Array.from({ length: 12 }, (_, monthIndex) => ({
+        month: monthLabel(monthIndex),
+        amount: txList
+          .filter((transaction) => new Date(transaction.date).getUTCMonth() === monthIndex)
+          .reduce((sum, transaction) => sum + transaction.amount, 0),
+      })))
+    const usdRate = await getNbuRate('USD', new Date().toISOString().slice(0, 10)).catch(() => 41.4)
+
+    res.json({
+      period,
+      uah,
+      usd: Math.round(uah / usdRate),
+      txCount: txList.length,
+      monthlyChart,
     })
   } catch (error) {
     next(error)

@@ -8,6 +8,17 @@ sqlite.pragma('foreign_keys = ON')
 
 export const db = drizzle(sqlite, { schema })
 
+function hasColumn(table: string, column: string): boolean {
+  const rows = sqlite.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>
+  return rows.some((row) => row.name === column)
+}
+
+function ensureColumn(table: string, definition: string, column: string) {
+  if (!hasColumn(table, column)) {
+    sqlite.exec(`ALTER TABLE ${table} ADD COLUMN ${definition}`)
+  }
+}
+
 export function initDb() {
   sqlite.exec(`
     CREATE TABLE IF NOT EXISTS users (
@@ -24,7 +35,12 @@ export function initDb() {
       tax_id TEXT NOT NULL DEFAULT '',
       "group" INTEGER NOT NULL DEFAULT 3,
       reg_date TEXT NOT NULL DEFAULT '',
-      kveds TEXT NOT NULL DEFAULT '[]'
+      kveds TEXT NOT NULL DEFAULT '[]',
+      subscription_tier TEXT NOT NULL DEFAULT 'free',
+      telegram_chat_id TEXT,
+      telegram_link_token TEXT,
+      email_notifications INTEGER NOT NULL DEFAULT 1,
+      telegram_notifications INTEGER NOT NULL DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS bank_accounts (
@@ -82,4 +98,10 @@ export function initDb() {
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
   `)
+
+  ensureColumn('entrepreneurs', "subscription_tier TEXT NOT NULL DEFAULT 'free'", 'subscription_tier')
+  ensureColumn('entrepreneurs', 'telegram_chat_id TEXT', 'telegram_chat_id')
+  ensureColumn('entrepreneurs', 'telegram_link_token TEXT', 'telegram_link_token')
+  ensureColumn('entrepreneurs', 'email_notifications INTEGER NOT NULL DEFAULT 1', 'email_notifications')
+  ensureColumn('entrepreneurs', 'telegram_notifications INTEGER NOT NULL DEFAULT 0', 'telegram_notifications')
 }

@@ -21,3 +21,7 @@ export async function getMe(): Promise<{ user: User; entrepreneur: Entrepreneur 
   const res = await client.get<{ user: User; entrepreneur: Entrepreneur | null }>('/api/auth/me')
   return res.data
 }
+
+export async function logout(): Promise<void> {
+  await client.post('/api/auth/logout')
+}

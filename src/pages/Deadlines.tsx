@@ -1,17 +1,18 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Check } from 'lucide-react'
-import { mockDeadlines } from '../mocks'
-import { formatDate, daysUntil } from '../utils/dates'
-import { formatNumber } from '../utils/formatCurrency'
 import { Badge } from '../components/ui/Badge'
+import { Button } from '../components/ui/Button'
+import { useUserStore } from '../store/userStore'
 import type { DeadlineStatus } from '../types'
+import { daysUntil, formatDate } from '../utils/dates'
+import { formatNumber } from '../utils/formatCurrency'
 
 const typeLabels: Record<string, string> = {
   ep_declaration: 'Декларація ЄП',
   ep_payment: 'Сплата ЄП',
-  esv: 'Єдиний соц. внесок',
+  esv: 'ЄСВ',
   vz: 'Військовий збір',
-  combined_report: 'Квартальний ЄП + ЄСВ + ВЗ',
+  combined_report: 'Квартальний звіт',
 }
 
 const filters = ['Всі', 'Майбутні', 'Прострочені', 'Сплачені']
@@ -25,90 +26,166 @@ function StatusBadge({ status, daysLeft }: { status: DeadlineStatus; daysLeft: n
 }
 
 export function Deadlines() {
+  const currentYear = new Date().getFullYear()
+  const yearOptions = [currentYear, currentYear + 1]
+  const [selectedYear, setSelectedYear] = useState(currentYear)
   const [activeFilter, setActiveFilter] = useState('Всі')
+  const { deadlines, isDeadlinesLoading, fetchDeadlines, updateDeadlineStatus } = useUserStore()
 
-  const filtered = mockDeadlines.filter(d => {
-    const days = daysUntil(d.dueDate)
-    if (activeFilter === 'Майбутні') return d.status === 'pending' && days >= 0
-    if (activeFilter === 'Прострочені') return d.status === 'pending' && days < 0
-    if (activeFilter === 'Сплачені') return d.status === 'paid' || d.status === 'submitted'
+  useEffect(() => {
+    fetchDeadlines(selectedYear)
+  }, [fetchDeadlines, selectedYear])
+
+  const filtered = useMemo(() => deadlines.filter((deadline) => {
+    const days = daysUntil(deadline.dueDate)
+    if (activeFilter === 'Майбутні') return deadline.status === 'pending' && days >= 0
+    if (activeFilter === 'Прострочені') return deadline.status === 'pending' && days < 0
+    if (activeFilter === 'Сплачені') return deadline.status === 'paid' || deadline.status === 'submitted'
     return true
-  })
+  }), [deadlines, activeFilter])
 
   return (
-    <div style={{ flex: 1, overflowY: 'auto', padding: '24px 20px', maxWidth: 900 }}>
+    <div style={{ flex: 1, overflowY: 'auto', padding: '24px 20px 104px', maxWidth: 960 }}>
       <div style={{ marginBottom: 24 }}>
-        <h1 style={{ fontSize: 28, fontWeight: 700, letterSpacing: '-0.025em', margin: 0, color: 'var(--text)' }}>
+        <h1 style={{ fontSize: 30, fontWeight: 700, letterSpacing: '-0.03em', margin: 0, color: 'var(--text)' }}>
           Дедлайни
         </h1>
-        <p style={{ fontSize: 13, color: 'var(--text-3)', margin: '4px 0 0' }}>
-          Календар податкових зобов'язань 2026
+        <p style={{ margin: '6px 0 0', fontSize: 13, color: 'var(--text-3)' }}>
+          Податкові зобовʼязання на {selectedYear} рік
         </p>
       </div>
 
-      {/* Filter tabs */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
-        {filters.map(f => (
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+        {yearOptions.map((year) => (
           <button
-            key={f}
-            onClick={() => setActiveFilter(f)}
+            key={year}
+            onClick={() => setSelectedYear(year)}
             style={{
-              padding: '6px 14px', borderRadius: 8, cursor: 'pointer',
-              background: activeFilter === f ? 'var(--indigo-glow)' : 'var(--surface-2)',
-              color: activeFilter === f ? 'var(--indigo-300)' : 'var(--text-2)',
-              fontSize: 13, fontWeight: 500, fontFamily: 'inherit',
-              border: activeFilter === f ? '1px solid rgba(129,140,248,0.3)' : '1px solid var(--border)',
+              padding: '6px 14px',
+              borderRadius: 999,
+              cursor: 'pointer',
+              background: selectedYear === year ? 'var(--indigo-glow)' : 'var(--surface-2)',
+              color: selectedYear === year ? 'var(--indigo-300)' : 'var(--text-2)',
+              border: selectedYear === year ? '1px solid rgba(129,140,248,0.3)' : '1px solid var(--border)',
+              fontSize: 13,
+              fontWeight: 600,
+              fontFamily: 'var(--font-sans)',
             }}
-          >{f}</button>
+          >
+            {year}
+          </button>
         ))}
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {filtered.map(d => {
-          const days = daysUntil(d.dueDate)
-          const done = d.status === 'paid' || d.status === 'submitted'
-          const urgent = !done && days >= 0 && days <= 14
-
-          return (
-            <div key={d.id} style={{
-              display: 'flex', alignItems: 'center', gap: 14,
-              padding: '14px 16px',
-              background: 'var(--surface)',
-              border: `1px solid ${urgent ? 'rgba(245,158,11,0.25)' : 'var(--border)'}`,
-              borderRadius: 12,
-            }}>
-              <div style={{
-                width: 20, height: 20, borderRadius: '50%', flexShrink: 0,
-                border: `2px solid ${done ? 'var(--success)' : urgent ? 'var(--warn)' : 'var(--border)'}`,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                background: done ? 'var(--success-10)' : 'transparent',
-              }}>
-                {done && <Check size={12} color="var(--success)" />}
-              </div>
-
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--text)' }}>
-                  {typeLabels[d.type] ?? d.type}
-                  <span style={{ fontSize: 12, color: 'var(--text-3)', marginLeft: 8 }}>· {d.period}</span>
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>
-                  {formatDate(d.dueDate)}
-                </div>
-              </div>
-
-              {d.amount != null && d.amount > 0 && (
-                <div className="tnum" style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', flexShrink: 0 }}>
-                  {formatNumber(d.amount)} ₴
-                </div>
-              )}
-
-              <div style={{ flexShrink: 0 }}>
-                <StatusBadge status={d.status} daysLeft={days} />
-              </div>
-            </div>
-          )
-        })}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
+        {filters.map((filter) => (
+          <button
+            key={filter}
+            onClick={() => setActiveFilter(filter)}
+            style={{
+              padding: '6px 14px',
+              borderRadius: 999,
+              cursor: 'pointer',
+              background: activeFilter === filter ? 'var(--indigo-glow)' : 'var(--surface-2)',
+              color: activeFilter === filter ? 'var(--indigo-300)' : 'var(--text-2)',
+              border: activeFilter === filter ? '1px solid rgba(129,140,248,0.3)' : '1px solid var(--border)',
+              fontSize: 13,
+              fontWeight: 500,
+              fontFamily: 'var(--font-sans)',
+            }}
+          >
+            {filter}
+          </button>
+        ))}
       </div>
+
+      {isDeadlinesLoading ? (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}>
+          <div className="spinner" style={{ width: 28, height: 28, borderWidth: 2 }} />
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gap: 10 }}>
+          {filtered.length === 0 && (
+            <div style={{ padding: 30, borderRadius: 18, background: 'var(--surface)', border: '1px solid var(--border)', textAlign: 'center', color: 'var(--text-3)' }}>
+              Немає дедлайнів для цього фільтра.
+            </div>
+          )}
+
+          {filtered.map((deadline) => {
+            const days = daysUntil(deadline.dueDate)
+            const done = deadline.status === 'paid' || deadline.status === 'submitted'
+            const urgent = !done && days >= 0 && days <= 14
+
+            return (
+              <div
+                key={deadline.id}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 14,
+                  padding: '16px 18px',
+                  background: 'var(--surface)',
+                  border: `1px solid ${urgent ? 'rgba(245,158,11,0.28)' : 'var(--border)'}`,
+                  borderRadius: 18,
+                  flexWrap: 'wrap',
+                }}
+              >
+                <button
+                  onClick={async () => {
+                    if (done) return
+                    await updateDeadlineStatus(deadline.id, 'paid')
+                    await fetchDeadlines(selectedYear)
+                  }}
+                  style={{
+                    width: 28,
+                    height: 28,
+                    borderRadius: '50%',
+                    border: `2px solid ${done ? 'var(--success)' : urgent ? 'var(--warn)' : 'var(--border)'}`,
+                    background: done ? 'var(--success-10)' : 'transparent',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: done ? 'default' : 'pointer',
+                    flexShrink: 0,
+                  }}
+                >
+                  {done && <Check size={14} color="var(--success)" />}
+                </button>
+
+                <div style={{ flex: 1, minWidth: 220 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                    <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)' }}>
+                      {typeLabels[deadline.type] ?? deadline.type}
+                    </div>
+                    <Badge tone="neutral">{deadline.period}</Badge>
+                  </div>
+                  <div style={{ marginTop: 6, fontSize: 13, color: 'var(--text-3)' }}>
+                    {formatDate(deadline.dueDate)}
+                  </div>
+                </div>
+
+                {deadline.amount != null && deadline.amount > 0 && (
+                  <div className="tnum" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>
+                    {formatNumber(deadline.amount)} ₴
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginLeft: 'auto' }}>
+                  <StatusBadge status={deadline.status} daysLeft={days} />
+                  {!done && (
+                    <Button variant="secondary" size="sm" onClick={async () => {
+                      await updateDeadlineStatus(deadline.id, 'paid')
+                      await fetchDeadlines(selectedYear)
+                    }}>
+                      Сплачено
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }

@@ -1,9 +1,12 @@
 import { Router } from 'express'
 import { eq } from 'drizzle-orm'
+import { randomUUID } from 'node:crypto'
 import { db } from '../db'
-import { deadlines, entrepreneurs } from '../db/schema'
+import { clients, deadlines, entrepreneurs } from '../db/schema'
 import { authMiddleware, type AuthRequest } from '../middleware/auth'
 import { generateDeadlinesForYears, type TaxGroup } from '../services/taxService'
+import { getTelegramBotUrl } from '../services/telegramService'
+import { sanitizeKveds, sanitizeTaxId, sanitizeText } from '../utils/sanitize'
 
 const router = Router()
 router.use(authMiddleware)
@@ -39,21 +42,23 @@ router.post('/', async (req: AuthRequest, res, next) => {
     if (![1, 2, 3].includes(group)) {
       return res.status(400).json({ error: 'Invalid tax group' })
     }
-    if (!body.taxId || !/^\d{10}$/.test(body.taxId)) {
+    const taxId = sanitizeTaxId(body.taxId)
+    if (!taxId || !/^\d{10}$/.test(taxId)) {
       return res.status(400).json({ error: 'Tax ID must contain 10 digits' })
     }
-    if (!body.regDate) {
+    const regDate = sanitizeText(body.regDate, 32)
+    if (!regDate) {
       return res.status(400).json({ error: 'Registration date is required' })
     }
 
     const [existing] = await db.select().from(entrepreneurs).where(eq(entrepreneurs.userId, req.userId!))
     const values = {
       userId: req.userId!,
-      fullName: body.fullName?.trim() || 'Марія Коваленко',
-      taxId: body.taxId,
+      fullName: sanitizeText(body.fullName || existing?.fullName || 'Марія Коваленко', 120),
+      taxId,
       group,
-      regDate: body.regDate,
-      kveds: JSON.stringify(body.kveds ?? ['62.01', '62.02']),
+      regDate,
+      kveds: JSON.stringify(sanitizeKveds(body.kveds).length ? sanitizeKveds(body.kveds) : ['62.01', '62.02']),
     }
 
     const [entrepreneur] = existing
@@ -68,6 +73,89 @@ router.post('/', async (req: AuthRequest, res, next) => {
     }
 
     res.json(serializeEntrepreneur(entrepreneur))
+  } catch (error) {
+    next(error)
+  }
+})
+
+router.get('/clients', async (req: AuthRequest, res, next) => {
+  try {
+    const [entrepreneur] = await db.select().from(entrepreneurs).where(eq(entrepreneurs.userId, req.userId!))
+    if (!entrepreneur) return res.json([])
+
+    const rows = await db.select().from(clients).where(eq(clients.entrepreneurId, entrepreneur.id))
+    res.json(rows)
+  } catch (error) {
+    next(error)
+  }
+})
+
+router.patch('/preferences', async (req: AuthRequest, res, next) => {
+  try {
+    const [entrepreneur] = await db.select().from(entrepreneurs).where(eq(entrepreneurs.userId, req.userId!))
+    if (!entrepreneur) return res.status(404).json({ error: 'Entrepreneur not found' })
+
+    const nextTier = sanitizeText(req.body['subscriptionTier'], 16).toLowerCase()
+    const tier = ['free', 'pro', 'business'].includes(nextTier)
+      ? nextTier
+      : entrepreneur.subscriptionTier
+
+    const [updated] = await db
+      .update(entrepreneurs)
+      .set({
+        subscriptionTier: tier,
+        emailNotifications: req.body['emailNotifications'] ?? entrepreneur.emailNotifications,
+        telegramNotifications: req.body['telegramNotifications'] ?? entrepreneur.telegramNotifications,
+      })
+      .where(eq(entrepreneurs.id, entrepreneur.id))
+      .returning()
+
+    if (!updated) return res.status(404).json({ error: 'Entrepreneur not found' })
+    res.json(serializeEntrepreneur(updated))
+  } catch (error) {
+    next(error)
+  }
+})
+
+router.post('/telegram-link', async (req: AuthRequest, res, next) => {
+  try {
+    const [entrepreneur] = await db.select().from(entrepreneurs).where(eq(entrepreneurs.userId, req.userId!))
+    if (!entrepreneur) return res.status(404).json({ error: 'Entrepreneur not found' })
+
+    const linkToken = entrepreneur.telegramLinkToken || randomUUID()
+    if (!entrepreneur.telegramLinkToken) {
+      await db
+        .update(entrepreneurs)
+        .set({ telegramLinkToken: linkToken })
+        .where(eq(entrepreneurs.id, entrepreneur.id))
+    }
+
+    res.json({
+      linkToken,
+      botUrl: getTelegramBotUrl(linkToken),
+      connected: Boolean(entrepreneur.telegramChatId),
+    })
+  } catch (error) {
+    next(error)
+  }
+})
+
+router.delete('/telegram-link', async (req: AuthRequest, res, next) => {
+  try {
+    const [entrepreneur] = await db.select().from(entrepreneurs).where(eq(entrepreneurs.userId, req.userId!))
+    if (!entrepreneur) return res.status(404).json({ error: 'Entrepreneur not found' })
+
+    const [updated] = await db
+      .update(entrepreneurs)
+      .set({
+        telegramChatId: null,
+        telegramNotifications: false,
+        telegramLinkToken: randomUUID(),
+      })
+      .where(eq(entrepreneurs.id, entrepreneur.id))
+      .returning()
+
+    res.json(serializeEntrepreneur(updated))
   } catch (error) {
     next(error)
   }

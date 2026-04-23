@@ -1,35 +1,14 @@
 import { Router } from 'express'
+import { and, eq } from 'drizzle-orm'
 import { db } from '../db'
 import { bankAccounts, entrepreneurs } from '../db/schema'
-import { eq } from 'drizzle-orm'
 import { authMiddleware, type AuthRequest } from '../middleware/auth'
 import { MonoApiError, MonoRateLimitError, syncMonobank, verifyToken } from '../services/monobankService'
-import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'crypto'
+import { encryptToken, decryptToken } from '../utils/crypto'
+import { sanitizeText } from '../utils/sanitize'
 
 const router = Router()
 router.use(authMiddleware)
-
-function encryptToken(token: string): string {
-  const key = scryptSync(process.env.JWT_SECRET ?? 'dev-secret', 'kasyr-monobank', 32)
-  const iv = randomBytes(12)
-  const cipher = createCipheriv('aes-256-gcm', key, iv)
-  const encrypted = Buffer.concat([cipher.update(token, 'utf8'), cipher.final()])
-  const tag = cipher.getAuthTag()
-  return `${iv.toString('hex')}:${tag.toString('hex')}:${encrypted.toString('hex')}`
-}
-
-function decryptToken(encrypted: string): string {
-  const [ivHex, tagHex, dataHex] = encrypted.split(':')
-  if (!ivHex || !tagHex || !dataHex) throw new Error('Invalid encrypted token payload')
-
-  const key = scryptSync(process.env.JWT_SECRET ?? 'dev-secret', 'kasyr-monobank', 32)
-  const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(ivHex, 'hex'))
-  decipher.setAuthTag(Buffer.from(tagHex, 'hex'))
-  return Buffer.concat([
-    decipher.update(Buffer.from(dataHex, 'hex')),
-    decipher.final(),
-  ]).toString('utf8')
-}
 
 router.post('/connect', async (req: AuthRequest, res, next) => {
   try {
@@ -38,11 +17,12 @@ router.post('/connect', async (req: AuthRequest, res, next) => {
     if (!ent) return res.status(400).json({ error: 'Complete entrepreneur setup first' })
 
     if (provider === 'monobank') {
-      const clientInfo = await verifyToken(token)
+      const cleanToken = sanitizeText(token, 512)
+      const clientInfo = await verifyToken(cleanToken)
       const primaryAccount = clientInfo.accounts.find(account => account.currencyCode === 980) ?? clientInfo.accounts[0]
       if (!primaryAccount) return res.status(400).json({ error: 'No Monobank accounts found' })
 
-      const encrypted = encryptToken(token)
+      const encrypted = encryptToken(cleanToken)
       const [account] = await db.insert(bankAccounts).values({
         entrepreneurId: ent.id,
         provider: 'monobank',
@@ -80,7 +60,19 @@ router.get('/accounts', async (req: AuthRequest, res, next) => {
 
 router.delete('/:id', async (req: AuthRequest, res, next) => {
   try {
-    await db.delete(bankAccounts).where(eq(bankAccounts.id, parseInt(req.params['id'] ?? '0', 10)))
+    const id = parseInt(req.params['id'] ?? '0', 10)
+    const [account] = await db
+      .select({
+        id: bankAccounts.id,
+        entrepreneurId: bankAccounts.entrepreneurId,
+      })
+      .from(bankAccounts)
+      .innerJoin(entrepreneurs, eq(bankAccounts.entrepreneurId, entrepreneurs.id))
+      .where(and(eq(bankAccounts.id, id), eq(entrepreneurs.userId, req.userId!)))
+
+    if (!account) return res.status(404).json({ error: 'Account not found' })
+
+    await db.delete(bankAccounts).where(eq(bankAccounts.id, id))
     res.json({ ok: true })
   } catch (err) { next(err) }
 })

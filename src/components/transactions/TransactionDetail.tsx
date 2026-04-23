@@ -7,6 +7,8 @@ import { formatDate } from '../../utils/dates'
 import { BankAvatar, UnclassifiedAvatar } from '../dashboard/TransactionRow'
 import { useTransactionStore } from '../../store/transactionStore'
 import type { Transaction, TransactionCategory } from '../../types'
+import { toast } from '../ui/Toast'
+import { useAuthStore } from '../../store/authStore'
 
 interface TransactionDetailProps {
   transaction: Transaction | null
@@ -16,18 +18,30 @@ interface TransactionDetailProps {
 
 export function TransactionDetail({ transaction: t, onClose, bankProvider = 'monobank' }: TransactionDetailProps) {
   const { updateTransaction, classifyTransaction } = useTransactionStore()
+  const { entrepreneur } = useAuthStore()
   const [classifying, setClassifying] = useState(false)
   const [aiReason, setAiReason] = useState('')
 
   if (!t) return null
 
   const isUnclassified = t.category === 'unclassified'
+  const subscriptionTier = entrepreneur?.subscriptionTier ?? 'free'
+  const canUseAi = subscriptionTier !== 'free'
+  const categoryOptions: Array<{ value: TransactionCategory; label: string }> = [
+    { value: 'income', label: 'Дохід' },
+    { value: 'expense', label: 'Витрата' },
+    { value: 'transfer', label: 'Переказ' },
+    { value: 'unclassified', label: 'Без класифікації' },
+  ]
 
   const handleClassify = async () => {
     setClassifying(true)
     try {
-      await classifyTransaction(t.id)
-      setAiReason('Оплата від клієнта за IT-послуги. Позначено як дохід 3-ї групи.')
+      const category = await classifyTransaction(t.id)
+      setAiReason(`AI-класифікація визначила категорію: ${category}.`)
+      toast('Класифіковано через AI ✓')
+    } catch {
+      toast('AI-класифікація недоступна для цього тарифу або сталася помилка', 'error')
     } finally {
       setClassifying(false)
     }
@@ -35,7 +49,7 @@ export function TransactionDetail({ transaction: t, onClose, bankProvider = 'mon
 
   const handleCategory = async (category: TransactionCategory) => {
     await updateTransaction(t.id, { category })
-    onClose()
+    toast(category === 'income' ? 'Класифіковано як дохід ✓' : 'Категорію оновлено ✓')
   }
 
   return (
@@ -79,17 +93,51 @@ export function TransactionDetail({ transaction: t, onClose, bankProvider = 'mon
         }}>
           <Sparkles size={16} color="var(--indigo-400)" style={{ marginTop: 2, flexShrink: 0 }} />
           <div>
-            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--indigo-300)' }}>AI-класифікація</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--indigo-300)' }}>
+              {canUseAi ? 'AI-класифікація' : 'Ручна класифікація'}
+            </div>
             <div style={{ fontSize: 13, color: 'var(--text)', marginTop: 2, lineHeight: 1.45 }}>
-              {aiReason || (isUnclassified
-                ? 'Сума без чіткого опису. Перевір — можливо, це особистий переказ або оплата від клієнта.'
-                : 'Оплата від клієнта за IT-послуги. Позначено як дохід 3-ї групи.'
-              )}
+              {canUseAi
+                ? aiReason || (isUnclassified
+                  ? 'Для PRO і Business Kasyr.ai може автоматично розпізнати дохід, витрату або переказ.'
+                  : 'Категорію вже можна уточнити вручну або перевірити через AI.'
+                )
+                : 'На тарифі Free категорію потрібно обрати вручну для кожної транзакції.'
+              }
             </div>
           </div>
         </div>
 
-        {isUnclassified && (
+        {!canUseAi && (
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-2)' }}>Категорія</span>
+              <select
+                value={t.category}
+                onChange={(event) => handleCategory(event.target.value as TransactionCategory)}
+                style={{
+                  width: '100%',
+                  height: 44,
+                  background: 'var(--surface-2)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 10,
+                  color: 'var(--text)',
+                  fontFamily: 'var(--font-sans)',
+                  fontSize: 14,
+                  padding: '0 14px',
+                }}
+              >
+                {categoryOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        )}
+
+        {canUseAi && isUnclassified && (
           <div style={{ marginBottom: 12 }}>
             <Button variant="secondary" full onClick={handleClassify} loading={classifying} icon={<Sparkles size={16} />}>
               Класифікувати через AI
@@ -98,9 +146,9 @@ export function TransactionDetail({ transaction: t, onClose, bankProvider = 'mon
         )}
 
         <div style={{ display: 'flex', gap: 8 }}>
-          <Button variant="secondary" full onClick={() => handleCategory('own_transfer')}>Не дохід</Button>
+          <Button variant="secondary" full onClick={onClose}>Закрити</Button>
           <Button variant="primary" full icon={<Check size={16} />} onClick={() => handleCategory('income')}>
-            {t.category === 'income' ? 'Підтверджено' : 'Підтвердити як дохід'}
+            Підтвердити дохід
           </Button>
         </div>
       </div>

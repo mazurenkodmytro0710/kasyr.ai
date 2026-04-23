@@ -42,8 +42,9 @@ interface TransactionRowProps {
 
 export function TransactionRow({ transaction: t, first, onTap, bankProvider = 'monobank' }: TransactionRowProps) {
   const isUnclassified = t.category === 'unclassified'
-  const isReturn = t.category === 'return'
   const isIncome = t.category === 'income'
+  const isExpense = ['expense', 'fee', 'return'].includes(t.category)
+  const isTransfer = ['transfer', 'own_transfer'].includes(t.category)
 
   return (
     <button
@@ -67,17 +68,18 @@ export function TransactionRow({ transaction: t, first, onTap, bankProvider = 'm
         <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 3, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <span>{formatShortDate(t.date)} · {bankProvider === 'monobank' ? 'Monobank' : bankProvider}</span>
           {isUnclassified && <Badge tone="warn" dashed>Не класифіковано</Badge>}
-          {isReturn && <Badge tone="danger">Повернення</Badge>}
+          {isExpense && <Badge tone="danger">Витрата</Badge>}
           {isIncome && <Badge tone="income">Дохід</Badge>}
+          {isTransfer && <Badge tone="neutral">Переказ</Badge>}
         </div>
       </div>
       <div style={{ textAlign: 'right', flexShrink: 0 }}>
         <div className="tnum" style={{
           fontSize: 15, fontWeight: 600,
-          color: isReturn ? 'var(--danger)' : isUnclassified ? 'var(--warn)' : 'var(--text)',
+          color: isExpense ? 'var(--danger)' : isUnclassified ? 'var(--warn)' : 'var(--text)',
           letterSpacing: '-0.01em',
         }}>
-          {isReturn ? '−' : '+'}{formatNumber(t.amount)}
+          {isExpense ? '−' : '+'}{formatNumber(t.amount)}
           <span style={{ color: 'var(--text-muted)', marginLeft: 4, fontWeight: 500 }}>₴</span>
         </div>
         {t.exchangeRate && t.exchangeRate > 0 && (

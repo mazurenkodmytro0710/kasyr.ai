@@ -5,3 +5,4 @@ kasyr.db
 kasyr.db-shm
 kasyr.db-wal
 .DS_Store
+server/logs

@@ -32,3 +32,15 @@ export async function classifyTransaction(id: number): Promise<{ category: Trans
   const res = await client.post<{ category: TransactionCategory; reason: string }>('/api/transactions/classify', { id })
   return res.data
 }
+
+export async function createTransaction(data: {
+  amount: number
+  date: string
+  description: string
+  category: TransactionCategory
+  clientId?: number | null
+  comment?: string | null
+}): Promise<Transaction> {
+  const res = await client.post<Transaction>('/api/transactions', data)
+  return res.data
+}

@@ -44,6 +44,8 @@ export function Modal({ open, onClose, children, title }: ModalProps) {
           padding: '24px',
           width: '100%',
           maxWidth: 480,
+          maxHeight: '90vh',
+          overflowY: 'auto',
           boxShadow: 'var(--shadow-md)',
         }}
       >

@@ -1,4 +1,5 @@
 export type TaxGroup = 1 | 2 | 3
+export type SubscriptionTier = 'free' | 'pro' | 'business'
 
 export interface User {
   id: number
@@ -14,12 +15,17 @@ export interface Entrepreneur {
   group: TaxGroup
   regDate: string
   kveds: string[]
+  subscriptionTier: SubscriptionTier
+  telegramChatId: string | null
+  telegramLinkToken: string | null
+  emailNotifications: boolean
+  telegramNotifications: boolean
 }
 
 export interface BankAccount {
   id: number
   entrepreneurId: number
-  provider: 'monobank' | 'privat' | 'manual'
+  provider: 'monobank' | 'manual' | 'privat' | 'pumb' | 'oshchadbank'
   accountId: string
   currency: string
   lastSync: string | null
@@ -27,6 +33,8 @@ export interface BankAccount {
 
 export type TransactionCategory =
   | 'income'
+  | 'expense'
+  | 'transfer'
   | 'return'
   | 'own_transfer'
   | 'fee'
@@ -79,10 +87,24 @@ export interface Report {
   entrepreneurId: number
   period: string
   type: string
-  status: 'pending' | 'submitted' | 'draft'
+  status: 'submitted' | 'draft' | 'ready'
   fileUrl: string | null
   submittedAt: string | null
   createdAt: string
+}
+
+export interface IncomePeriodData {
+  period: string
+  uah: number
+  txCount: number
+  usd?: number
+  monthlyChart: { month: string; amount: number }[]
+}
+
+export interface TelegramLinkResponse {
+  linkToken: string
+  botUrl: string | null
+  connected: boolean
 }
 
 export interface DashboardData {

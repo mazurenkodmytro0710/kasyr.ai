@@ -107,8 +107,13 @@ export async function syncMonobank(token: string, accountId: number, lastSync: s
 
     if (existing) continue
 
-    const amount = Math.round(item.amount / 100)
-    const category = (await classifyWithAI(item.description, amount, currencyFromCode(item.currencyCode))).category
+    const signedAmount = Math.round(item.amount / 100)
+    const amount = Math.round(Math.abs(item.amount) / 100)
+    const currency = currencyFromCode(item.currencyCode)
+    const exchangeRate = item.currencyCode !== 980 && item.operationAmount
+      ? Math.abs(item.amount) / Math.abs(item.operationAmount)
+      : null
+    const category = (await classifyWithAI(item.description, signedAmount, currency)).category
 
     await db.insert(transactions).values({
       accountId,
@@ -116,8 +121,8 @@ export async function syncMonobank(token: string, accountId: number, lastSync: s
       date: new Date(item.time * 1000).toISOString(),
       description: item.description || item.comment || 'Monobank transaction',
       amount,
-      currency: currencyFromCode(item.currencyCode),
-      exchangeRate: null,
+      currency,
+      exchangeRate,
       category,
       clientId: null,
       comment: item.comment ?? null,

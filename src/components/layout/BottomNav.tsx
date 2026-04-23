@@ -1,5 +1,6 @@
 import { useNavigate, useLocation } from 'react-router-dom'
 import { LayoutDashboard, ArrowLeftRight, Plus, FileText, User } from 'lucide-react'
+import { useUiStore } from '../../store/uiStore'
 
 const tabs = [
   { key: 'home', label: 'Огляд', path: '/dashboard', Icon: LayoutDashboard },
@@ -12,6 +13,7 @@ const tabs = [
 export function BottomNav() {
   const navigate = useNavigate()
   const location = useLocation()
+  const { openAddTransaction } = useUiStore()
 
   return (
     <nav style={{
@@ -34,6 +36,7 @@ export function BottomNav() {
         t.primary ? (
           <button
             key={t.key}
+            onClick={openAddTransaction}
             style={{
               width: 52, height: 52, borderRadius: '50%',
               background: 'var(--indigo-500)', color: 'white', border: 'none',

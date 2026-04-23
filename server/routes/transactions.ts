@@ -1,9 +1,11 @@
 import { Router } from 'express'
+import { randomUUID } from 'node:crypto'
 import { db } from '../db'
 import { transactions, bankAccounts, entrepreneurs } from '../db/schema'
-import { eq, and, desc, like, sql, inArray, or } from 'drizzle-orm'
+import { eq, and, desc, like, sql, inArray, or, gte, lte } from 'drizzle-orm'
 import { authMiddleware, type AuthRequest } from '../middleware/auth'
 import { classifyWithAI } from '../services/aiClassifier'
+import { sanitizeText } from '../utils/sanitize'
 
 const router = Router()
 router.use(authMiddleware)
@@ -17,9 +19,14 @@ async function getAccountIds(userId: number): Promise<number[]> {
   return accounts.map(account => account.id)
 }
 
+async function getEntrepreneurByUserId(userId: number) {
+  const [entrepreneur] = await db.select().from(entrepreneurs).where(eq(entrepreneurs.userId, userId))
+  return entrepreneur
+}
+
 router.get('/', async (req: AuthRequest, res, next) => {
   try {
-    const { page = '1', limit = '20', category, search } = req.query as Record<string, string>
+    const { page = '1', limit = '20', category, search, from, to } = req.query as Record<string, string>
     const pageNum = parseInt(page, 10)
     const limitNum = Math.min(parseInt(limit, 10), 100)
     const offset = (pageNum - 1) * limitNum
@@ -28,13 +35,21 @@ router.get('/', async (req: AuthRequest, res, next) => {
     if (!accountIds.length) return res.json({ data: [], total: 0, page: pageNum, limit: limitNum })
 
     const conditions = [inArray(transactions.accountId, accountIds)]
-    if (category) conditions.push(eq(transactions.category, category))
+    if (category === 'expense') {
+      conditions.push(inArray(transactions.category, ['expense', 'fee', 'return']))
+    } else if (category === 'transfer') {
+      conditions.push(inArray(transactions.category, ['transfer', 'own_transfer']))
+    } else if (category) {
+      conditions.push(eq(transactions.category, category))
+    }
     if (search) {
       conditions.push(or(
         like(transactions.description, `%${search}%`),
         sql`cast(${transactions.amount} as text) like ${`%${search}%`}`,
       )!)
     }
+    if (from) conditions.push(gte(transactions.date, from))
+    if (to) conditions.push(lte(transactions.date, `${to}T23:59:59.999Z`))
 
     const where = and(...conditions)
     const data = await db.select().from(transactions).where(where)
@@ -42,6 +57,73 @@ router.get('/', async (req: AuthRequest, res, next) => {
     const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(transactions).where(where)
 
     res.json({ data, total: count, page: pageNum, limit: limitNum })
+  } catch (err) { next(err) }
+})
+
+router.post('/', async (req: AuthRequest, res, next) => {
+  try {
+    const entrepreneur = await getEntrepreneurByUserId(req.userId!)
+    if (!entrepreneur) {
+      return res.status(400).json({ error: 'Complete entrepreneur setup first' })
+    }
+
+    const amount = Math.round(Math.abs(Number(req.body['amount'] ?? 0)))
+    const date = sanitizeText(req.body['date'], 64)
+    const description = sanitizeText(req.body['description'], 255)
+    const categoryInput = sanitizeText(req.body['category'], 32).toLowerCase()
+    const categories = ['income', 'expense', 'transfer', 'unclassified']
+    const manualCategory = categories.includes(categoryInput) ? categoryInput : 'unclassified'
+
+    if (!amount || !date || !description) {
+      return res.status(400).json({ error: 'Amount, date and description are required' })
+    }
+
+    let [manualAccount] = await db
+      .select()
+      .from(bankAccounts)
+      .where(and(
+        eq(bankAccounts.entrepreneurId, entrepreneur.id),
+        eq(bankAccounts.provider, 'manual'),
+      ))
+
+    if (!manualAccount) {
+      [manualAccount] = await db
+        .insert(bankAccounts)
+        .values({
+          entrepreneurId: entrepreneur.id,
+          provider: 'manual',
+          accountId: `manual-${entrepreneur.id}`,
+          currency: 'UAH',
+          tokenEncrypted: null,
+          lastSync: new Date().toISOString(),
+        })
+        .returning()
+    }
+
+    const category = entrepreneur.subscriptionTier === 'free'
+      ? manualCategory
+      : manualCategory === 'unclassified'
+        ? (await classifyWithAI(description, amount, 'UAH')).category
+        : manualCategory
+
+    const [created] = await db
+      .insert(transactions)
+        .values({
+        accountId: manualAccount.id,
+        externalId: `manual-${randomUUID()}`,
+        date: date.includes('T') ? date : `${date}T12:00:00.000Z`,
+        description,
+        amount,
+        currency: 'UAH',
+        exchangeRate: null,
+        category,
+        clientId: req.body['clientId'] ? Number(req.body['clientId']) : null,
+        comment: sanitizeText(req.body['comment'], 500) || null,
+        rawData: JSON.stringify({ source: 'manual' }),
+      })
+      .returning()
+
+    res.status(201).json(created)
   } catch (err) { next(err) }
 })
 
@@ -76,6 +158,12 @@ router.patch('/:id', async (req: AuthRequest, res, next) => {
 
 router.post('/classify', async (req: AuthRequest, res, next) => {
   try {
+    const entrepreneur = await getEntrepreneurByUserId(req.userId!)
+    if (!entrepreneur) return res.status(404).json({ error: 'Entrepreneur not found' })
+    if (entrepreneur.subscriptionTier === 'free') {
+      return res.status(403).json({ error: 'AI classification is available for PRO and Business plans' })
+    }
+
     const { id } = req.body as { id: number }
     const accountIds = await getAccountIds(req.userId!)
     const [tx] = await db.select().from(transactions).where(eq(transactions.id, id))

@@ -3,17 +3,22 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Sidebar } from './components/layout/Sidebar'
 import { BottomNav } from './components/layout/BottomNav'
 import { Header } from './components/layout/Header'
+import { AddTransactionModal } from './components/transactions/AddTransactionModal'
+import { HelpChat } from './components/help/HelpChat'
 import { Onboarding } from './pages/Onboarding'
+import { Landing } from './pages/Landing'
 import { Dashboard } from './pages/Dashboard'
 import { Transactions } from './pages/Transactions'
 import { Reports } from './pages/Reports'
 import { Deadlines } from './pages/Deadlines'
+import { Help } from './pages/Help'
 import { Settings } from './pages/Settings'
 import { useAuthStore } from './store/authStore'
+import { ToastProvider } from './components/ui/Toast'
 
 function AppLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: 'var(--bg)' }}>
+    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', overflowX: 'hidden', background: 'var(--bg)' }}>
       {/* Desktop sidebar */}
       <div className="hidden md:flex">
         <Sidebar />
@@ -34,20 +39,23 @@ function AppLayout({ children }: { children: React.ReactNode }) {
       <div className="md:hidden">
         <BottomNav />
       </div>
+
+      <AddTransactionModal />
+      <HelpChat />
     </div>
   )
 }
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { entrepreneur, isAuthenticated, isLoading, token } = useAuthStore()
-  if (isLoading) {
+  const { entrepreneur, isAuthenticated, isLoading, hasInitialized } = useAuthStore()
+  if (!hasInitialized || isLoading) {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)' }}>
         <div className="spinner" style={{ width: 32, height: 32, borderWidth: 3 }} />
       </div>
     )
   }
-  if (!token && !isAuthenticated) {
+  if (!isAuthenticated) {
     return <Navigate to="/onboarding" replace />
   }
   if (!entrepreneur) {
@@ -57,14 +65,15 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 }
 
 function AppRoutes() {
-  const { init, token } = useAuthStore()
+  const { init, isAuthenticated } = useAuthStore()
 
   useEffect(() => {
-    if (token) init()
-  }, [token, init])
+    init()
+  }, [init])
 
   return (
     <Routes>
+      <Route path="/" element={<Landing />} />
       <Route path="/onboarding" element={<Onboarding />} />
       <Route
         path="/dashboard"
@@ -106,7 +115,15 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
-      <Route path="*" element={<Navigate to={token ? '/dashboard' : '/onboarding'} replace />} />
+      <Route
+        path="/help"
+        element={
+          <ProtectedRoute>
+            <AppLayout><Help /></AppLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route path="*" element={<Navigate to={isAuthenticated ? '/dashboard' : '/'} replace />} />
     </Routes>
   )
 }
@@ -115,6 +132,7 @@ export default function App() {
   return (
     <BrowserRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
       <AppRoutes />
+      <ToastProvider />
     </BrowserRouter>
   )
 }

@@ -1,13 +1,13 @@
 import OpenAI from 'openai'
 
-export type AiCategory = 'income' | 'return' | 'own_transfer' | 'fee' | 'unclassified'
+export type AiCategory = 'income' | 'expense' | 'transfer' | 'unclassified'
 
 export interface AiClassification {
   category: AiCategory
   reason: string
 }
 
-const categories: AiCategory[] = ['income', 'return', 'own_transfer', 'fee', 'unclassified']
+const categories: AiCategory[] = ['income', 'expense', 'transfer', 'unclassified']
 
 function normalizeCategory(value: string): AiCategory {
   const clean = value.trim().toLowerCase()
@@ -17,18 +17,18 @@ function normalizeCategory(value: string): AiCategory {
 function classifyByRules(description: string, amount: number): AiClassification {
   const text = description.toLowerCase()
   if (text.includes('коміс') || text.includes('fee')) {
-    return { category: 'fee', reason: 'Схоже на банківську або платіжну комісію.' }
+    return { category: 'expense', reason: 'Схоже на банківську або платіжну комісію.' }
   }
   if (text.includes('повернен') || text.includes('refund') || amount < 0) {
-    return { category: 'return', reason: 'Схоже на повернення коштів або відʼємну операцію.' }
+    return { category: 'expense', reason: 'Схоже на витрату або повернення коштів.' }
   }
   if (text.includes('переказ') || text.includes('transfer') || text.includes('між рахунками')) {
-    return { category: 'own_transfer', reason: 'Схоже на переказ між власними рахунками.' }
+    return { category: 'transfer', reason: 'Схоже на переказ між власними рахунками.' }
   }
   if (amount > 0 && (text.includes('invoice') || text.includes('payout') || text.includes('оплата'))) {
     return { category: 'income', reason: 'Схоже на оплату від клієнта.' }
   }
-  return { category: amount > 0 ? 'income' : 'unclassified', reason: 'Автоматична класифікація за базовими правилами MVP.' }
+  return { category: amount > 0 ? 'income' : 'expense', reason: 'Автоматична класифікація за базовими правилами MVP.' }
 }
 
 export async function classifyWithAI(
@@ -46,9 +46,8 @@ export async function classifyWithAI(
 Ти — бухгалтер для українського ФОП.
 Класифікуй транзакцію в одну з категорій:
 - income: оплата від клієнта за послуги/товари
-- return: повернення коштів
-- own_transfer: переказ між власними рахунками
-- fee: комісія банку або платіжної системи
+- expense: витрата, повернення коштів, банківська комісія
+- transfer: переказ між власними рахунками
 - unclassified: незрозуміло
 
 Транзакція: ${description}, сума: ${amount} ${currency}
@@ -58,13 +57,13 @@ export async function classifyWithAI(
 `
 
   try {
-    const response = await openai.responses.create({
+    const completion = await openai.chat.completions.create({
       model,
-      input: prompt,
-      max_output_tokens: 12,
+      max_tokens: 10,
+      messages: [{ role: 'user', content: prompt }],
     })
 
-    const category = normalizeCategory(response.output_text)
+    const category = normalizeCategory(completion.choices[0]?.message?.content ?? '')
     return { category, reason: `OpenAI класифікація транзакції (${model}).` }
   } catch (error) {
     console.warn('OpenAI classification failed, falling back to local rules:', error)

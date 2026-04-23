@@ -1,186 +1,211 @@
-import { useState } from 'react'
-import { FileText, Download, Check } from 'lucide-react'
-import { Button } from '../components/ui/Button'
+import { useEffect, useMemo, useState } from 'react'
+import { Download, FileText, Send } from 'lucide-react'
+import client from '../api/client'
 import { Badge } from '../components/ui/Badge'
-import { mockReports } from '../mocks'
+import { Button } from '../components/ui/Button'
+import { toast } from '../components/ui/Toast'
+import { useUserStore } from '../store/userStore'
+import type { IncomePeriodData, Report } from '../types'
+import { formatNumber } from '../utils/formatCurrency'
 
-const periodLabels: Record<string, string> = {
-  'Q4-2025': 'Q4 2025',
-  'Q1-2026': 'Q1 2026',
-  'Q2-2026': 'Q2 2026',
+function statusLabel(report: Report | undefined, hasData: boolean) {
+  if (report?.status === 'submitted') return { text: 'Надісланий', tone: 'income' as const }
+  if (report) return { text: 'Готовий', tone: 'neutral' as const }
+  if (hasData) return { text: 'Чернетка', tone: 'warn' as const }
+  return { text: 'Чернетка', tone: 'neutral' as const }
 }
 
-const deadlineDates: Record<string, string> = {
-  'Q4-2025': '9 лютого 2026',
-  'Q1-2026': '9 травня 2026',
-  'Q2-2026': '9 серпня 2026',
-}
+async function downloadPdf(period: string) {
+  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001'
+  const response = await fetch(`${apiUrl}/api/reports/pdf?period=${period}`, {
+    credentials: 'include',
+  })
 
-const submittedDates: Record<string, string> = {
-  'Q4-2025': '9 лютого 2026',
-}
+  if (!response.ok) {
+    throw new Error('PDF download failed')
+  }
 
-function WizardStep({ step, active, completed, label }: { step: number; active: boolean; completed: boolean; label: string }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-      <div style={{
-        width: 32, height: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: completed ? 'var(--success)' : active ? 'var(--indigo-500)' : 'var(--surface-2)',
-        color: completed || active ? 'white' : 'var(--text-3)',
-        fontSize: 13, fontWeight: 700, flexShrink: 0,
-        border: active ? '2px solid var(--indigo-400)' : 'none',
-      }}>
-        {completed ? <Check size={16} /> : step}
-      </div>
-      <span style={{ fontSize: 14, fontWeight: 500, color: active ? 'var(--text)' : completed ? 'var(--text-2)' : 'var(--text-3)' }}>
-        {label}
-      </span>
-    </div>
-  )
-}
-
-function ReportWizard({ period, onClose }: { period: string; onClose: () => void }) {
-  const [step, setStep] = useState(1)
-
-  return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-      <div onClick={e => e.stopPropagation()} style={{
-        background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 20,
-        padding: 28, width: '100%', maxWidth: 520, boxShadow: 'var(--shadow-md)',
-      }}>
-        <div style={{ marginBottom: 24 }}>
-          <div className="label" style={{ color: 'var(--indigo-400)' }}>ДЕКЛАРАЦІЯ ЄП</div>
-          <h2 style={{ fontSize: 22, fontWeight: 700, margin: '6px 0 0', letterSpacing: '-0.02em' }}>
-            {periodLabels[period] ?? period}
-          </h2>
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 28 }}>
-          <WizardStep step={1} active={step === 1} completed={step > 1} label="Перевір дані" />
-          <WizardStep step={2} active={step === 2} completed={step > 2} label="Підпиши КЕП" />
-          <WizardStep step={3} active={step === 3} completed={step > 3} label="Надіслати до ДПС" />
-        </div>
-
-        {step === 1 && (
-          <div>
-            <div style={{ background: 'var(--surface-2)', borderRadius: 12, border: '1px solid var(--border)', padding: 16, marginBottom: 16 }}>
-              <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 8 }}>Дохід за {periodLabels[period]}</div>
-              <div className="tnum" style={{ fontSize: 28, fontWeight: 700, color: 'var(--text)' }}>256 680 ₴</div>
-              <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 4 }}>з урахуванням 42 транзакцій</div>
-            </div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <Button variant="secondary" full onClick={onClose}>Скасувати</Button>
-              <Button variant="primary" full onClick={() => setStep(2)}>Підтвердити дані →</Button>
-            </div>
-          </div>
-        )}
-
-        {step === 2 && (
-          <div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
-              {['Дія.Підпис', 'monoКЕП', 'Файловий ключ'].map(method => (
-                <button key={method} style={{
-                  padding: '14px 16px', background: 'var(--surface-2)', borderRadius: 10,
-                  border: '1px solid var(--border)', cursor: 'pointer', textAlign: 'left',
-                  fontFamily: 'inherit', color: 'var(--text)', fontSize: 14, fontWeight: 500,
-                }}>{method} <span style={{ color: 'var(--text-3)', fontSize: 12, marginLeft: 8 }}>(скоро)</span></button>
-              ))}
-            </div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <Button variant="secondary" full onClick={() => setStep(1)}>← Назад</Button>
-              <Button variant="primary" full onClick={() => setStep(3)}>Продовжити →</Button>
-            </div>
-          </div>
-        )}
-
-        {step === 3 && (
-          <div>
-            <div style={{
-              padding: 24, background: 'var(--success-10)', borderRadius: 12, textAlign: 'center', marginBottom: 16,
-              border: '1px solid rgba(16,185,129,0.2)',
-            }}>
-              <div style={{ fontSize: 40, marginBottom: 8 }}>✅</div>
-              <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--success)' }}>Успішно надіслано</div>
-              <div style={{ fontSize: 13, color: 'var(--text-3)', marginTop: 4 }}>Декларацію прийнято ДПС</div>
-            </div>
-            <Button variant="primary" full onClick={onClose}>Закрити</Button>
-          </div>
-        )}
-      </div>
-    </div>
-  )
+  const blob = await response.blob()
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = `report-${period}.pdf`
+  anchor.click()
+  URL.revokeObjectURL(url)
 }
 
 export function Reports() {
-  const [wizardPeriod, setWizardPeriod] = useState<string | null>(null)
+  const { reports, fetchReports, submitReport } = useUserStore()
+  const [incomeData, setIncomeData] = useState<IncomePeriodData | null>(null)
+  const [loadingPeriod, setLoadingPeriod] = useState(false)
+  const [preparing, setPreparing] = useState(false)
+  const currentYear = new Date().getFullYear()
+  const currentQuarter = Math.ceil((new Date().getMonth() + 1) / 3)
+  const periods = useMemo(() => (
+    Array.from({ length: currentQuarter }, (_, index) => `Q${index + 1}-${currentYear}`)
+  ), [currentQuarter, currentYear])
+  const [selectedPeriod, setSelectedPeriod] = useState(periods.at(-1) ?? `Q1-${currentYear}`)
 
-  const allPeriods = ['Q4-2025', 'Q1-2026', 'Q2-2026']
+  useEffect(() => {
+    fetchReports()
+  }, [fetchReports])
+
+  useEffect(() => {
+    setLoadingPeriod(true)
+    client.get<IncomePeriodData>('/api/dashboard/income', { params: { period: selectedPeriod } })
+      .then((response) => setIncomeData(response.data))
+      .catch(() => setIncomeData(null))
+      .finally(() => setLoadingPeriod(false))
+  }, [selectedPeriod])
+
+  const activeReport = reports.find((report) => report.period === selectedPeriod)
+  const activeStatus = statusLabel(activeReport, Boolean(incomeData?.txCount))
+
+  const handlePrepare = async () => {
+    setPreparing(true)
+    try {
+      if (!activeReport) {
+        await client.post('/api/reports/generate', { period: selectedPeriod, type: 'ep_declaration' })
+      }
+      await fetchReports()
+      toast('Звіт підготовлено ✓')
+    } catch {
+      toast('Не вдалося підготувати звіт', 'error')
+    } finally {
+      setPreparing(false)
+    }
+  }
 
   return (
-    <div style={{ flex: 1, overflowY: 'auto', padding: '24px 20px', maxWidth: 900 }}>
-      <div style={{ marginBottom: 28 }}>
-        <h1 style={{ fontSize: 28, fontWeight: 700, letterSpacing: '-0.025em', margin: 0, color: 'var(--text)' }}>
-          Звіти
+    <div style={{ flex: 1, overflowY: 'auto', padding: '24px 20px 96px', maxWidth: 980 }}>
+      <div style={{ marginBottom: 26 }}>
+        <div className="label" style={{ color: 'var(--indigo-400)' }}>Звіти</div>
+        <h1 style={{ fontSize: 30, fontWeight: 700, letterSpacing: '-0.03em', margin: '6px 0 10px', color: 'var(--text)' }}>
+          Квартальна звітність
         </h1>
-        <p style={{ fontSize: 13, color: 'var(--text-3)', margin: '4px 0 0' }}>
-          Декларації та звітність до ДПС
+        <p style={{ margin: 0, fontSize: 14, color: 'var(--text-3)', lineHeight: 1.6 }}>
+          Обирай квартал, перевіряй реальні дані з бази і формуй PDF-звіт для податкової.
         </p>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {allPeriods.map(period => {
-          const report = mockReports.find(r => r.period === period)
-          const isSubmitted = report?.status === 'submitted'
-          const deadline = deadlineDates[period]
-
-          return (
-            <div key={period} style={{
-              padding: '18px 20px', background: 'var(--surface)',
-              border: '1px solid var(--border)', borderRadius: 14,
-              display: 'flex', alignItems: 'center', gap: 16,
-            }}>
-              <div style={{
-                width: 44, height: 44, borderRadius: 10, flexShrink: 0,
-                background: isSubmitted ? 'var(--success-10)' : 'var(--indigo-glow)',
-                color: isSubmitted ? 'var(--success)' : 'var(--indigo-400)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}>
-                <FileText size={20} />
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-                  <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)' }}>
-                    {periodLabels[period]} · Декларація ЄП
-                  </span>
-                  {isSubmitted
-                    ? <Badge tone="income" dot>Подано</Badge>
-                    : <Badge tone="neutral">Не подано</Badge>
-                  }
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--text-3)' }}>
-                  {isSubmitted
-                    ? `Подано ${submittedDates[period]}`
-                    : `Дедлайн: ${deadline}`
-                  }
-                </div>
-              </div>
-              {isSubmitted ? (
-                <Button variant="secondary" size="sm" icon={<Download size={14} />}>
-                  PDF
-                </Button>
-              ) : (
-                <Button variant="primary" size="sm" onClick={() => setWizardPeriod(period)}>
-                  Підготувати →
-                </Button>
-              )}
-            </div>
-          )
-        })}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
+        {periods.map((period) => (
+          <button
+            key={period}
+            onClick={() => setSelectedPeriod(period)}
+            style={{
+              padding: '7px 14px',
+              borderRadius: 999,
+              cursor: 'pointer',
+              background: selectedPeriod === period ? 'var(--indigo-glow)' : 'var(--surface-2)',
+              color: selectedPeriod === period ? 'var(--indigo-300)' : 'var(--text-2)',
+              border: selectedPeriod === period ? '1px solid rgba(129,140,248,0.3)' : '1px solid var(--border)',
+              fontFamily: 'var(--font-sans)',
+              fontSize: 13,
+              fontWeight: 600,
+            }}
+          >
+            {period.replace('-', ' ')}
+          </button>
+        ))}
       </div>
 
-      {wizardPeriod && (
-        <ReportWizard period={wizardPeriod} onClose={() => setWizardPeriod(null)} />
-      )}
+      <div className="grid gap-4 md:grid-cols-3" style={{ marginBottom: 18 }}>
+        <div style={{ padding: 18, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 18 }}>
+          <div className="label">Статус</div>
+          <div style={{ marginTop: 12 }}>
+            <Badge tone={activeStatus.tone} dot>{activeStatus.text}</Badge>
+          </div>
+        </div>
+        <div style={{ padding: 18, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 18 }}>
+          <div className="label">Дохід за квартал</div>
+          <div className="tnum" style={{ marginTop: 8, fontSize: 28, fontWeight: 800, color: 'var(--text)' }}>
+            {loadingPeriod ? '...' : `${formatNumber(incomeData?.uah ?? 0)} ₴`}
+          </div>
+        </div>
+        <div style={{ padding: 18, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 18 }}>
+          <div className="label">Транзакції</div>
+          <div className="tnum" style={{ marginTop: 8, fontSize: 28, fontWeight: 800, color: 'var(--text)' }}>
+            {loadingPeriod ? '...' : incomeData?.txCount ?? 0}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 18, padding: 22 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap', marginBottom: 18 }}>
+          <div>
+            <div className="label">Вибраний квартал</div>
+            <h2 style={{ margin: '8px 0 6px', fontSize: 22, fontWeight: 700, color: 'var(--text)' }}>
+              {selectedPeriod.replace('-', ' ')}
+            </h2>
+            <p style={{ margin: 0, fontSize: 13, color: 'var(--text-3)', lineHeight: 1.6 }}>
+              Дані беруться з транзакцій, які вже синхронізовані або додані вручну.
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <Button variant="secondary" icon={<FileText size={16} />} loading={preparing} onClick={handlePrepare}>
+              Підготувати
+            </Button>
+            <Button
+              variant="primary"
+              icon={<Download size={16} />}
+              onClick={async () => {
+                try {
+                  await downloadPdf(selectedPeriod)
+                  toast('PDF завантажено ✓')
+                } catch {
+                  toast('Не вдалося завантажити PDF', 'error')
+                }
+              }}
+            >
+              Завантажити PDF
+            </Button>
+            {activeReport && activeReport.status !== 'submitted' && (
+              <Button
+                variant="ghost"
+                icon={<Send size={16} />}
+                onClick={async () => {
+                  try {
+                    await submitReport(activeReport.id)
+                    toast('Звіт позначено як надісланий ✓')
+                  } catch {
+                    toast('Не вдалося змінити статус звіту', 'error')
+                  }
+                }}
+              >
+                Позначити як надісланий
+              </Button>
+            )}
+          </div>
+        </div>
+
+        <div style={{ padding: 18, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>Звіт по декларації ЄП</div>
+              <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 4 }}>
+                Станом на зараз статус цього кварталу: {activeStatus.text.toLowerCase()}.
+              </div>
+            </div>
+            <Badge tone={activeStatus.tone} dot>{activeStatus.text}</Badge>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2" style={{ marginTop: 18 }}>
+            <div>
+              <div className="label">Оборот</div>
+              <div className="tnum" style={{ marginTop: 8, fontSize: 24, fontWeight: 700, color: 'var(--text)' }}>
+                {formatNumber(incomeData?.uah ?? 0)} ₴
+              </div>
+            </div>
+            <div>
+              <div className="label">Записів у базі</div>
+              <div className="tnum" style={{ marginTop: 8, fontSize: 24, fontWeight: 700, color: 'var(--text)' }}>
+                {incomeData?.txCount ?? 0}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

@@ -16,6 +16,11 @@ export const entrepreneurs = sqliteTable('entrepreneurs', {
   group: integer('group').notNull().default(3),
   regDate: text('reg_date').notNull().default(''),
   kveds: text('kveds').notNull().default('[]'),
+  subscriptionTier: text('subscription_tier').notNull().default('free'),
+  telegramChatId: text('telegram_chat_id'),
+  telegramLinkToken: text('telegram_link_token'),
+  emailNotifications: integer('email_notifications', { mode: 'boolean' }).notNull().default(true),
+  telegramNotifications: integer('telegram_notifications', { mode: 'boolean' }).notNull().default(false),
 })
 
 export const bankAccounts = sqliteTable('bank_accounts', {

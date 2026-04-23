@@ -131,7 +131,7 @@ export function Sidebar() {
       <div style={{ padding: '8px 12px 12px', borderTop: '1px solid var(--border)' }}>
         <NavItemBtn item={{ key: 'settings', label: 'Налаштування', path: '/settings', Icon: Settings }} active={location.pathname === '/settings'} />
         <button
-          onClick={() => {}}
+          onClick={() => navigate('/help')}
           style={{
             width: '100%',
             display: 'flex',
@@ -170,7 +170,7 @@ export function Sidebar() {
           </div>
         </div>
         <button
-          onClick={() => { logout(); navigate('/onboarding') }}
+          onClick={async () => { await logout(); navigate('/onboarding') }}
           style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: 'var(--text-3)' }}
         >
           <LogOut size={16} />

@@ -14,9 +14,22 @@ interface IncomeChartProps {
   delta?: number
   quarter: string
   mobile?: boolean
+  periodOptions?: Array<{ label: string; value: string }>
+  activePeriod?: string
+  onPeriodChange?: (period: string) => void
 }
 
-export function IncomeChart({ uah, usd, months, delta, quarter, mobile }: IncomeChartProps) {
+export function IncomeChart({
+  uah,
+  usd,
+  months,
+  delta,
+  quarter,
+  mobile,
+  periodOptions,
+  activePeriod,
+  onPeriodChange,
+}: IncomeChartProps) {
   const max = Math.max(...months.map(m => m.amount), 1)
 
   if (mobile) {
@@ -41,6 +54,29 @@ export function IncomeChart({ uah, usd, months, delta, quarter, mobile }: Income
             </div>
           )}
         </div>
+        {periodOptions && onPeriodChange && (
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
+            {periodOptions.map((option) => (
+              <button
+                key={option.value}
+                onClick={() => onPeriodChange(option.value)}
+                style={{
+                  padding: '6px 10px',
+                  borderRadius: 999,
+                  border: '1px solid var(--border)',
+                  background: activePeriod === option.value ? 'var(--indigo-glow)' : 'var(--surface-2)',
+                  color: activePeriod === option.value ? 'var(--indigo-300)' : 'var(--text-3)',
+                  fontFamily: 'var(--font-sans)',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        )}
         <MobileBarChart months={months} max={max} />
       </div>
     )
@@ -53,7 +89,7 @@ export function IncomeChart({ uah, usd, months, delta, quarter, mobile }: Income
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
         <div>
-          <div className="label">ДОХІД ПО МІСЯЦЯХ · 2026</div>
+          <div className="label">ДОХІД ПО МІСЯЦЯХ · {quarter}</div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 6 }}>
             <span className="tnum" style={{ fontSize: 26, fontWeight: 700, letterSpacing: '-0.02em' }}>
               {formatNumber(uah)} <span style={{ color: 'var(--text-muted)', fontWeight: 500, fontSize: 14 }}>₴</span>
@@ -62,13 +98,24 @@ export function IncomeChart({ uah, usd, months, delta, quarter, mobile }: Income
           </div>
         </div>
         <div style={{ display: 'flex', gap: 4, background: 'var(--surface-2)', padding: 3, borderRadius: 8 }}>
-          {['6M', '1Y', 'Все'].map((t, i) => (
-            <button key={t} style={{
-              padding: '5px 12px', borderRadius: 6, border: 'none', cursor: 'pointer',
-              background: i === 1 ? 'var(--surface-3)' : 'transparent',
-              color: i === 1 ? 'var(--text)' : 'var(--text-3)',
-              fontSize: 12, fontWeight: 500, fontFamily: 'inherit',
-            }}>{t}</button>
+          {(periodOptions ?? []).map((option) => (
+            <button
+              key={option.value}
+              onClick={() => onPeriodChange?.(option.value)}
+              style={{
+                padding: '5px 12px',
+                borderRadius: 6,
+                border: 'none',
+                cursor: 'pointer',
+                background: activePeriod === option.value ? 'var(--surface-3)' : 'transparent',
+                color: activePeriod === option.value ? 'var(--text)' : 'var(--text-3)',
+                fontSize: 12,
+                fontWeight: 500,
+                fontFamily: 'inherit',
+              }}
+            >
+              {option.label}
+            </button>
           ))}
         </div>
       </div>
