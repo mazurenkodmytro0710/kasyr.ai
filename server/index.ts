@@ -32,9 +32,10 @@ import { getRequestMeta, logSecurityEvent } from './utils/securityLog'
 import { bankAccounts, deadlines, entrepreneurs, users } from './db/schema'
 
 const app = express()
+app.set('trust proxy', 1)
 const port = Number(process.env.PORT ?? 3001)
 const clientOrigin =
-  process.env.VITE_CLIENT_ORIGIN ?? process.env.CLIENT_ORIGIN ?? 'http://localhost:5173'
+  process.env.APP_URL ?? process.env.VITE_CLIENT_ORIGIN ?? process.env.CLIENT_ORIGIN ?? 'http://localhost:5173'
 
 function buildLimiter(windowMs: number, max: number, scope: string) {
   return rateLimit({
@@ -58,9 +59,17 @@ app.use(helmet())
 app.use(
   cors({
     origin(origin, callback) {
-      if (!origin || origin === clientOrigin) {
+      if (!origin) return callback(null, true)
+
+      const localOrigins = ['http://localhost:5173', 'http://127.0.0.1:5173']
+      const isLocal = localOrigins.includes(origin)
+      const isCloudflareDev = origin.endsWith('.trycloudflare.com')
+      const isProdClient = origin === clientOrigin
+
+      if (isLocal || isCloudflareDev || isProdClient) {
         return callback(null, true)
       }
+
       logSecurityEvent('cors_blocked', { origin })
       return callback(new Error('Origin not allowed'))
     },

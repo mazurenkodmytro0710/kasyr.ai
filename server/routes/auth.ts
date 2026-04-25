@@ -11,10 +11,9 @@ import { clearAuthCookie, setAuthCookie, signAuthToken } from '../utils/auth'
 import { getRequestMeta, logSecurityEvent } from '../utils/securityLog'
 import { sanitizeEmail } from '../utils/sanitize'
 import { sendVerificationEmail } from '../services/emailService'
+import { getAppUrl } from '../utils/appUrl'
 
 const router = Router()
-const clientOrigin =
-  process.env.VITE_CLIENT_ORIGIN ?? process.env.CLIENT_ORIGIN ?? 'http://localhost:5173'
 const BCRYPT_ROUNDS = 12
 const skipEmailVerification = process.env.SKIP_EMAIL_VERIFICATION === 'true'
 
@@ -264,23 +263,23 @@ router.get(
   '/google/callback',
   (req, res, next) => {
     if (!googleConfigured) {
-      return res.redirect(`${clientOrigin}/onboarding?error=google_oauth_not_configured`)
+      return res.redirect(`${getAppUrl(req)}/onboarding?error=google_oauth_not_configured`)
     }
 
     return passport.authenticate('google', {
       session: false,
-      failureRedirect: `${clientOrigin}/onboarding?error=google_oauth_failed`,
+      failureRedirect: `${getAppUrl(req)}/onboarding?error=google_oauth_failed`,
     })(req, res, next)
   },
   async (req, res, next) => {
     try {
       const authUser = req.user as { id: number; email: string } | undefined
       if (!authUser) {
-        return res.redirect(`${clientOrigin}/onboarding?error=google_oauth_failed`)
+        return res.redirect(`${getAppUrl(req)}/onboarding?error=google_oauth_failed`)
       }
 
       const token = issueAuth(res, authUser.id)
-      res.redirect(`${clientOrigin}/onboarding?token=${encodeURIComponent(token)}`)
+      res.redirect(`${getAppUrl(req)}/onboarding?token=${encodeURIComponent(token)}`)
     } catch (error) {
       next(error)
     }

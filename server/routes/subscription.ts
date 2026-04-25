@@ -5,6 +5,7 @@ import { db } from '../db'
 import { entrepreneurs } from '../db/schema'
 import { authMiddleware, type AuthRequest } from '../middleware/auth'
 import { PLANS, type PlanTier } from '../config/plans'
+import { getAppUrl } from '../utils/appUrl'
 
 const router = Router()
 
@@ -18,7 +19,6 @@ router.post('/checkout', authMiddleware, async (req: AuthRequest, res, next) => 
 
     const merchantLogin = process.env.WAYFORPAY_MERCHANT_LOGIN
     const secretKey = process.env.WAYFORPAY_SECRET_KEY
-    const clientOrigin = process.env.CLIENT_ORIGIN ?? 'http://localhost:5173'
     const apiUrl = process.env.API_URL ?? 'http://localhost:3001'
 
     if (!merchantLogin || !secretKey) {
@@ -27,6 +27,7 @@ router.post('/checkout', authMiddleware, async (req: AuthRequest, res, next) => 
 
     const orderId = `kasyr-${req.userId}-${Date.now()}`
     const productName = `Kasyr.ai ${plan.name}`
+    const clientOrigin = getAppUrl(req)
 
     const signatureStr = [
       merchantLogin,

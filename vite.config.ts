@@ -7,6 +7,7 @@ export default defineConfig({
     drop: ['console', 'debugger'],
   },
   server: {
+    allowedHosts: true,
     proxy: {
       '/api': {
         target: 'http://localhost:3001',

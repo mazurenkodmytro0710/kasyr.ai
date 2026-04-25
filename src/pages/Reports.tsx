@@ -17,7 +17,7 @@ function statusLabel(report: Report | undefined, hasData: boolean) {
 }
 
 async function downloadPdf(period: string) {
-  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001'
+  const apiUrl = import.meta.env.VITE_API_URL ?? ''
   const response = await fetch(`${apiUrl}/api/reports/pdf?period=${period}`, {
     credentials: 'include',
   })
@@ -39,7 +39,7 @@ function handleExport(year: number, quarter?: number) {
   const params = new URLSearchParams({ year: String(year) })
   if (quarter) params.set('quarter', String(quarter))
 
-  const apiUrl = import.meta.env.VITE_API_URL || ''
+  const apiUrl = import.meta.env.VITE_API_URL ?? ''
   window.open(
     `${apiUrl}/api/exports/accountant?${params.toString()}`,
     '_blank',

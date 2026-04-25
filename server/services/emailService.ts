@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer'
+import { getAppUrl } from '../utils/appUrl'
 
 // ─── Mailer detection ────────────────────────────────────────────────────────
 type MailerMode = 'resend' | 'smtp' | 'log'
@@ -10,7 +11,8 @@ function getMailerMode(): MailerMode {
 }
 
 const DEFAULT_FROM = process.env.EMAIL_FROM ?? 'Kasyr.ai <noreply@kasyr.ai>'
-const APP_URL = process.env.VITE_CLIENT_ORIGIN ?? process.env.CLIENT_ORIGIN ?? 'https://kasyr.ai'
+
+// APP_URL deleted — using getAppUrl() dynamically
 
 async function sendEmail(opts: { to: string; subject: string; html: string; from?: string }): Promise<boolean> {
   const from = opts.from ?? DEFAULT_FROM
@@ -52,7 +54,8 @@ async function sendEmail(opts: { to: string; subject: string; html: string; from
 }
 
 // ─── Base HTML wrapper ────────────────────────────────────────────────────────
-function emailWrapper(content: string): string {
+function emailWrapper(content: string, appUrl?: string): string {
+  const baseUrl = appUrl ?? getAppUrl()
   return `<!DOCTYPE html>
 <html lang="uk">
 <head>
@@ -68,7 +71,7 @@ function emailWrapper(content: string): string {
     ${content}
     <div style="margin-top:40px;padding-top:20px;border-top:1px solid #1E1E27;font-size:12px;color:#64748B;">
       Kasyr.ai — автоматизований облік для українських ФОП<br>
-      <a href="${APP_URL}/help" style="color:#6366F1;text-decoration:none;">Центр допомоги</a> ·
+      <a href="${baseUrl}/help" style="color:#6366F1;text-decoration:none;">Центр допомоги</a> ·
       <a href="mailto:support@kasyr.ai" style="color:#6366F1;text-decoration:none;">Підтримка</a>
     </div>
   </div>
@@ -101,6 +104,8 @@ export async function sendDeadlineReminder(
   const dueDateFormatted = new Date(dueDate).toLocaleDateString('uk-UA', { day: 'numeric', month: 'long', year: 'numeric' })
   const daysWord = daysLeft === 1 ? 'день' : daysLeft < 5 ? 'дні' : 'днів'
 
+  const appUrl = getAppUrl()
+
   const html = emailWrapper(`
     <div style="background:linear-gradient(135deg,#1e1b4b,#1C1C22);border-radius:16px;padding:28px;margin-bottom:20px;">
       <div style="font-size:11px;color:#818CF8;letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px;">Kasyr.ai · Податковий дедлайн</div>
@@ -118,10 +123,10 @@ export async function sendDeadlineReminder(
     <div style="font-size:13px;color:#94A3B8;margin-bottom:20px;">
       Дедлайн: <strong style="color:#F1F5F9;">${dueDateFormatted}</strong>
     </div>
-    <a href="${APP_URL}/deadlines" style="display:inline-block;background:#6366F1;color:white;text-decoration:none;padding:12px 24px;border-radius:10px;font-weight:600;font-size:14px;">
+    <a href="${appUrl}/deadlines" style="display:inline-block;background:#6366F1;color:white;text-decoration:none;padding:12px 24px;border-radius:10px;font-weight:600;font-size:14px;">
       Відкрити Kasyr.ai →
     </a>
-  `)
+  `, appUrl)
 
   return sendEmail({
     to: email,
@@ -135,6 +140,7 @@ export async function sendVerificationEmail(
   email: string,
   name: string,
   verificationUrl: string,
+  appUrl?: string,
 ): Promise<boolean> {
   const html = emailWrapper(`
     <h2 style="font-size:24px;font-weight:800;letter-spacing:-.02em;color:#fff;margin:0 0 12px;">Підтвердь свій email</h2>
@@ -147,7 +153,7 @@ export async function sendVerificationEmail(
     <p style="font-size:12px;color:#64748B;margin:0;">
       Посилання дійсне 24 години. Якщо ти не реєструвався — просто проігноруй цей лист.
     </p>
-  `)
+  `, appUrl)
 
   return sendEmail({
     to: email,
@@ -165,7 +171,8 @@ export async function sendSubscriptionExpiryWarning(
   daysLeft: number,
 ): Promise<boolean> {
   const expiresFormatted = new Date(expiresAt).toLocaleDateString('uk-UA', { day: 'numeric', month: 'long', year: 'numeric' })
-  const renewUrl = `${APP_URL}/settings`
+  const appUrl = getAppUrl()
+  const renewUrl = `${appUrl}/settings`
 
   const html = emailWrapper(`
     <div style="background:linear-gradient(135deg,#1e1b4b,#1C1C22);border-radius:16px;padding:28px;margin-bottom:20px;">
@@ -181,7 +188,7 @@ export async function sendSubscriptionExpiryWarning(
       <div style="font-size:13px;color:#94A3B8;margin-bottom:8px;">Після закінчення підписки:</div>
       <ul style="margin:0;padding:0 0 0 18px;color:#64748B;font-size:13px;line-height:1.7;">
         <li>Автоматичний імпорт транзакцій з банку призупиниться</li>
-        <li>AI-класифікація витрат стане недоступна</li>
+        <li>AI-класифікація витрат стане недоступною</li>
         <li>Генерація PDF звітів буде заблокована</li>
       </ul>
     </div>
@@ -191,7 +198,7 @@ export async function sendSubscriptionExpiryWarning(
     <a href="${renewUrl}" style="display:inline-block;background:#6366F1;color:white;text-decoration:none;padding:14px 28px;border-radius:12px;font-weight:700;font-size:15px;">
       Продовжити підписку →
     </a>
-  `)
+  `, appUrl)
 
   return sendEmail({
     to: email,

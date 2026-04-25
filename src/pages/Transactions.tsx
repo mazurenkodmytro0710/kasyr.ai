@@ -27,7 +27,7 @@ const tabs = [
 ]
 
 async function downloadBookPdf(period: string) {
-  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001'
+  const apiUrl = import.meta.env.VITE_API_URL ?? ''
   const response = await fetch(`${apiUrl}/api/reports/book?period=${period}`, {
     credentials: 'include',
   })
