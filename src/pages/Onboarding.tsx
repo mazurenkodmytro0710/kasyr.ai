@@ -11,15 +11,26 @@ import { connectMonobank, syncBank } from '../api/monobank'
 import { saveEntrepreneur } from '../api/entrepreneur'
 import { useAuthStore } from '../store/authStore'
 import type { TaxGroup } from '../types'
-import { sanitizeEmailInput, sanitizeKvedList, sanitizeTaxIdInput, sanitizeText } from '../utils/sanitize'
+import {
+  sanitizeEmailInput,
+  sanitizeKvedList,
+  sanitizeTaxIdInput,
+  sanitizeText,
+} from '../utils/sanitize'
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true'
 
 const banks = [
   { id: 'monobank', label: 'Monobank', badge: 'Працює', available: true },
-  { id: 'privatbank', label: 'PrivatBank', badge: 'Скоро', available: false },
+  { id: 'privatbank', label: 'ПриватБанк', badge: 'Скоро', available: false },
   { id: 'pumb', label: 'ПУМБ', badge: 'Скоро', available: false },
   { id: 'oshchadbank', label: 'Ощадбанк', badge: 'Скоро', available: false },
+  { id: 'raiffeisen', label: 'Raiffeisen Bank', badge: 'Скоро', available: false },
+  { id: 'sense', label: 'Sense Bank', badge: 'Скоро', available: false },
+  { id: 'otp', label: 'OTP Bank', badge: 'Скоро', available: false },
+  { id: 'abank', label: 'А-Банк', badge: 'Скоро', available: false },
+  { id: 'ukrsib', label: 'Укрсиббанк', badge: 'Скоро', available: false },
+  { id: 'tascom', label: 'Таскомбанк', badge: 'Скоро', available: false },
 ]
 
 function StepIndicator({ total, current }: { total: number; current: number }) {
@@ -32,7 +43,12 @@ function StepIndicator({ total, current }: { total: number; current: number }) {
             height: 4,
             borderRadius: 999,
             width: index + 1 === current ? 28 : 12,
-            background: index + 1 < current ? 'var(--indigo-500)' : index + 1 === current ? 'var(--indigo-300)' : 'var(--surface-2)',
+            background:
+              index + 1 < current
+                ? 'var(--indigo-500)'
+                : index + 1 === current
+                  ? 'var(--indigo-300)'
+                  : 'var(--surface-2)',
             transition: 'all .2s ease',
           }}
         />
@@ -43,6 +59,7 @@ function StepIndicator({ total, current }: { total: number; current: number }) {
 
 function AuthStep({ onDone }: { onDone: () => void }) {
   const { login, register, isLoading } = useAuthStore()
+  const apiBaseUrl = import.meta.env.VITE_API_URL ?? ''
   const [mode, setMode] = useState<'register' | 'login'>('register')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -52,11 +69,24 @@ function AuthStep({ onDone }: { onDone: () => void }) {
   const title = mode === 'register' ? 'Створити акаунт' : 'Увійти'
   const submitLabel = mode === 'register' ? 'Створити акаунт' : 'Увійти'
 
+  const passwordStrength = useMemo(() => {
+    if (password.length === 0) return null
+    if (password.length < 8) return { level: 0, label: '🔴 Слабкий', color: 'var(--danger)' }
+    const hasUpper = /[A-Z]/.test(password)
+    const hasDigit = /[0-9]/.test(password)
+    if (hasUpper && hasDigit) return { level: 2, label: '🟢 Надійний', color: 'var(--success)' }
+    return { level: 1, label: '🟡 Середній', color: 'var(--warn)' }
+  }, [password])
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
     const normalizedEmail = sanitizeEmailInput(email)
-    if (!normalizedEmail.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/) || password.length < 8) {
-      setError('Перевір email і пароль (мінімум 8 символів)')
+    if (
+      !normalizedEmail.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/) ||
+      password.length < 8 ||
+      password.length > 128
+    ) {
+      setError('Перевір email і пароль (мінімум 8, максимум 128 символів)')
       return
     }
 
@@ -76,7 +106,16 @@ function AuthStep({ onDone }: { onDone: () => void }) {
 
   return (
     <div>
-      <div style={{ display: 'flex', gap: 6, marginBottom: 20, background: 'var(--surface-2)', padding: 4, borderRadius: 12 }}>
+      <div
+        style={{
+          display: 'flex',
+          gap: 6,
+          marginBottom: 20,
+          background: 'var(--surface-2)',
+          padding: 4,
+          borderRadius: 12,
+        }}
+      >
         {[
           { key: 'register', label: 'Реєстрація' },
           { key: 'login', label: 'Вхід' },
@@ -102,11 +141,20 @@ function AuthStep({ onDone }: { onDone: () => void }) {
         ))}
       </div>
 
-      <h2 style={{ fontSize: 28, fontWeight: 700, letterSpacing: '-0.03em', margin: '0 0 8px', color: 'var(--text)' }}>
+      <h2
+        style={{
+          fontSize: 28,
+          fontWeight: 700,
+          letterSpacing: '-0.03em',
+          margin: '0 0 8px',
+          color: 'var(--text)',
+        }}
+      >
         {title}
       </h2>
       <p style={{ margin: '0 0 24px', fontSize: 14, color: 'var(--text-3)', lineHeight: 1.55 }}>
-        Після входу ми перевіримо, чи вже налаштовано профіль ФОП, і проведемо тебе далі тільки по потрібних кроках.
+        Після входу ми перевіримо, чи вже налаштовано профіль ФОП, і проведемо тебе далі тільки по
+        потрібних кроках.
       </p>
 
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -124,20 +172,58 @@ function AuthStep({ onDone }: { onDone: () => void }) {
           placeholder="Мінімум 8 символів"
           value={password}
           onChange={(event) => setPassword(event.target.value)}
+          maxLength={128}
           autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
-          trailing={(
+          trailing={
             <button
               type="button"
               onClick={() => setShowPassword((current) => !current)}
-              style={{ background: 'transparent', border: 'none', color: 'var(--text-3)', cursor: 'pointer', padding: 0 }}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--text-3)',
+                cursor: 'pointer',
+                padding: 0,
+              }}
             >
               {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
             </button>
-          )}
+          }
         />
 
+        {mode === 'register' && passwordStrength && (
+          <div>
+            <div style={{ display: 'flex', gap: 4, marginBottom: 6 }}>
+              {[0, 1, 2].map((i) => (
+                <div
+                  key={i}
+                  style={{
+                    flex: 1,
+                    height: 3,
+                    borderRadius: 999,
+                    background:
+                      i <= passwordStrength.level ? passwordStrength.color : 'var(--surface-2)',
+                    transition: 'background .2s',
+                  }}
+                />
+              ))}
+            </div>
+            <div style={{ fontSize: 11, color: passwordStrength.color, fontWeight: 600 }}>
+              {passwordStrength.label}
+            </div>
+          </div>
+        )}
+
         {error && (
-          <div style={{ padding: '12px 14px', borderRadius: 12, background: 'var(--danger-10)', color: 'var(--danger)', fontSize: 13 }}>
+          <div
+            style={{
+              padding: '12px 14px',
+              borderRadius: 12,
+              background: 'var(--danger-10)',
+              color: 'var(--danger)',
+              fontSize: 13,
+            }}
+          >
             {error}
           </div>
         )}
@@ -147,14 +233,29 @@ function AuthStep({ onDone }: { onDone: () => void }) {
         </Button>
 
         <div style={{ position: 'relative', textAlign: 'center', margin: '6px 0' }}>
-          <div style={{ position: 'absolute', inset: '50% 0 auto', height: 1, background: 'var(--border)' }} />
-          <span style={{ position: 'relative', padding: '0 12px', background: 'var(--bg)', fontSize: 12, color: 'var(--text-3)' }}>
+          <div
+            style={{
+              position: 'absolute',
+              inset: '50% 0 auto',
+              height: 1,
+              background: 'var(--border)',
+            }}
+          />
+          <span
+            style={{
+              position: 'relative',
+              padding: '0 12px',
+              background: 'var(--bg)',
+              fontSize: 12,
+              color: 'var(--text-3)',
+            }}
+          >
             або
           </span>
         </div>
 
         <a
-          href="/api/auth/google"
+          href={`${apiBaseUrl}/api/auth/google`}
           style={{
             height: 48,
             borderRadius: 10,
@@ -203,7 +304,15 @@ function GroupStep({ onDone }: { onDone: (group: TaxGroup) => void }) {
 
   return (
     <div>
-      <h2 style={{ fontSize: 28, fontWeight: 700, letterSpacing: '-0.03em', margin: '0 0 8px', color: 'var(--text)' }}>
+      <h2
+        style={{
+          fontSize: 28,
+          fontWeight: 700,
+          letterSpacing: '-0.03em',
+          margin: '0 0 8px',
+          color: 'var(--text)',
+        }}
+      >
         Обери групу ЄП
       </h2>
       <p style={{ margin: '0 0 22px', fontSize: 14, color: 'var(--text-3)' }}>
@@ -226,11 +335,22 @@ function GroupStep({ onDone }: { onDone: (group: TaxGroup) => void }) {
               cursor: 'pointer',
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-              <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)' }}>{group.label}</div>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 12,
+              }}
+            >
+              <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)' }}>
+                {group.label}
+              </div>
               {selected === group.id && <Check size={16} color="var(--indigo-300)" />}
             </div>
-            <div style={{ marginTop: 6, fontSize: 12, color: 'var(--text-3)', lineHeight: 1.55 }}>{group.desc}</div>
+            <div style={{ marginTop: 6, fontSize: 12, color: 'var(--text-3)', lineHeight: 1.55 }}>
+              {group.desc}
+            </div>
           </button>
         ))}
       </div>
@@ -242,27 +362,70 @@ function GroupStep({ onDone }: { onDone: (group: TaxGroup) => void }) {
   )
 }
 
+function formatRateValue(value: number): string {
+  return String(value)
+}
+
 function EntrepreneurStep({
   group,
   onDone,
 }: {
   group: TaxGroup
-  onDone: (payload: { fullName: string; taxId: string; regDate: string; kveds: string[]; group: TaxGroup }) => Promise<void>
+  onDone: (payload: {
+    fullName: string
+    taxId: string
+    regDate: string
+    kveds: string[]
+    group: TaxGroup
+    vatPayer: boolean
+    localEpRatePercent: number | null
+  }) => Promise<void>
 }) {
   const [fullName, setFullName] = useState('')
   const [taxId, setTaxId] = useState('')
-  const [kveds, setKveds] = useState('62.01, 62.02')
+  const [kveds, setKveds] = useState('')
   const [regDate, setRegDate] = useState<Date | null>(new Date())
+  const [vatPayer, setVatPayer] = useState(false)
+  const [localEpRatePercent, setLocalEpRatePercent] = useState('')
   const [error, setError] = useState('')
   const [isSaving, setIsSaving] = useState(false)
+
+  const minRate = group === 1 || group === 2 ? 0 : null
+  const rateLimit = group === 1 ? 10 : group === 2 ? 20 : null
+
+  const stepLocalEpRate = (delta: number) => {
+    if (rateLimit == null || minRate == null) return
+    const parsedCurrentValue = Number(localEpRatePercent)
+    const currentValue = Number.isInteger(parsedCurrentValue) ? parsedCurrentValue : minRate
+    const nextValue = Math.min(rateLimit, Math.max(minRate, currentValue + delta))
+    setLocalEpRatePercent(formatRateValue(nextValue))
+  }
 
   const handleSubmit = async () => {
     const cleanName = sanitizeText(fullName, 120)
     const cleanTaxId = sanitizeTaxIdInput(taxId)
     const cleanKveds = sanitizeKvedList(kveds)
+    const parsedLocalRate =
+      group === 1 || group === 2
+        ? localEpRatePercent.trim() === ''
+          ? null
+          : Number(localEpRatePercent)
+        : null
 
     if (cleanName.length < 4 || cleanTaxId.length !== 10 || !regDate) {
       setError('Перевір ПІБ, ІПН і дату реєстрації')
+      return
+    }
+
+    if (
+      (group === 1 || group === 2) &&
+      parsedLocalRate != null &&
+      (Number.isNaN(parsedLocalRate) ||
+        !Number.isInteger(parsedLocalRate) ||
+        parsedLocalRate < (minRate ?? 0) ||
+        parsedLocalRate > (rateLimit ?? 0))
+    ) {
+      setError(`Для ${group} групи вкажи цілу ставку ЄП від ${minRate} до ${rateLimit}%`)
       return
     }
 
@@ -275,6 +438,8 @@ function EntrepreneurStep({
         regDate: regDate.toISOString().slice(0, 10),
         kveds: cleanKveds,
         group,
+        vatPayer: group === 3 ? vatPayer : false,
+        localEpRatePercent: group === 1 || group === 2 ? parsedLocalRate : null,
       })
     } catch (err) {
       const message = (err as { response?: { data?: { error?: string } } })?.response?.data?.error
@@ -286,7 +451,15 @@ function EntrepreneurStep({
 
   return (
     <div>
-      <h2 style={{ fontSize: 28, fontWeight: 700, letterSpacing: '-0.03em', margin: '0 0 8px', color: 'var(--text)' }}>
+      <h2
+        style={{
+          fontSize: 28,
+          fontWeight: 700,
+          letterSpacing: '-0.03em',
+          margin: '0 0 8px',
+          color: 'var(--text)',
+        }}
+      >
         Дані ФОП
       </h2>
       <p style={{ margin: '0 0 22px', fontSize: 14, color: 'var(--text-3)' }}>
@@ -296,7 +469,7 @@ function EntrepreneurStep({
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         <Input
           label="ПІБ"
-          placeholder="Іван Петренко"
+          placeholder="Шевченко Тарас Григорович"
           value={fullName}
           onChange={(event) => setFullName(event.target.value)}
         />
@@ -308,7 +481,9 @@ function EntrepreneurStep({
           hint="10 цифр з довідки ДПС"
         />
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-2)' }}>Дата реєстрації ФОП</span>
+          <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-2)' }}>
+            Дата реєстрації ФОП
+          </span>
           <DatePicker
             selected={regDate}
             onChange={(date: Date | null) => setRegDate(date)}
@@ -325,10 +500,186 @@ function EntrepreneurStep({
           onChange={(event) => setKveds(event.target.value)}
           hint="Через кому, наприклад: 62.01, 62.02"
         />
+
+        {group === 3 && (
+          <div style={{ display: 'grid', gap: 10 }}>
+            <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-2)' }}>
+              Режим ЄП для 3 групи
+            </div>
+            <div style={{ display: 'grid', gap: 10 }}>
+              {[
+                {
+                  key: 'without-vat',
+                  title: 'Без ПДВ',
+                  desc: 'Kasyr.ai рахуватиме ЄП 5% від доходу. Книга обліку міститиме доходи.',
+                  active: !vatPayer,
+                  onClick: () => setVatPayer(false),
+                },
+                {
+                  key: 'with-vat',
+                  title: 'Платник ПДВ',
+                  desc: 'Kasyr.ai рахуватиме ЄП 3% від доходу. Книга обліку міститиме доходи і витрати.',
+                  active: vatPayer,
+                  onClick: () => setVatPayer(true),
+                },
+              ].map((option) => (
+                <button
+                  key={option.key}
+                  type="button"
+                  onClick={option.onClick}
+                  style={{
+                    width: '100%',
+                    padding: '14px 16px',
+                    background: option.active ? 'rgba(99,102,241,0.14)' : 'var(--surface-2)',
+                    border: `1px solid ${option.active ? 'rgba(129,140,248,0.45)' : 'var(--border)'}`,
+                    borderRadius: 14,
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                    fontFamily: 'var(--font-sans)',
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      gap: 12,
+                      alignItems: 'center',
+                    }}
+                  >
+                    <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>
+                      {option.title}
+                    </div>
+                    {option.active && <Check size={16} color="var(--indigo-300)" />}
+                  </div>
+                  <div
+                    style={{ marginTop: 6, fontSize: 12, color: 'var(--text-3)', lineHeight: 1.6 }}
+                  >
+                    {option.desc}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {(group === 1 || group === 2) && (
+          <div
+            style={{
+              padding: 14,
+              borderRadius: 14,
+              border: '1px solid rgba(129,140,248,0.2)',
+              background: 'rgba(99,102,241,0.08)',
+              display: 'grid',
+              gap: 12,
+            }}
+          >
+            <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-2)' }}>
+              Ставка ЄП у твоїй громаді, %
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <button
+                type="button"
+                onClick={() => stepLocalEpRate(-1)}
+                disabled={!localEpRatePercent || Number(localEpRatePercent) <= (minRate ?? 0)}
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 10,
+                  border: '1px solid var(--border)',
+                  background: 'var(--surface-2)',
+                  color: 'var(--text)',
+                  fontSize: 18,
+                  cursor:
+                    !localEpRatePercent || Number(localEpRatePercent) <= (minRate ?? 0)
+                      ? 'not-allowed'
+                      : 'pointer',
+                  opacity:
+                    !localEpRatePercent || Number(localEpRatePercent) <= (minRate ?? 0) ? 0.5 : 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontFamily: 'inherit',
+                }}
+              >
+                −
+              </button>
+              <input
+                className="kasyr-number-stepper-input"
+                type="text"
+                value={localEpRatePercent}
+                inputMode="numeric"
+                placeholder={String(rateLimit)}
+                onChange={(event) => {
+                  const onlyDigits = event.target.value.replace(/[^\d]/g, '')
+                  if (onlyDigits === '') {
+                    setLocalEpRatePercent('')
+                    return
+                  }
+                  const nextNumber = Number(onlyDigits)
+                  if (!Number.isFinite(nextNumber)) return
+                  const clamped = Math.min(
+                    rateLimit ?? nextNumber,
+                    Math.max(minRate ?? 0, nextNumber),
+                  )
+                  setLocalEpRatePercent(String(clamped))
+                }}
+                style={{
+                  flex: 1,
+                  height: 40,
+                  borderRadius: 10,
+                  border: '1px solid var(--border)',
+                  background: 'var(--surface-2)',
+                  color: 'var(--text)',
+                  padding: '0 12px',
+                  fontSize: 15,
+                  fontFamily: 'var(--font-sans)',
+                  textAlign: 'center',
+                  outline: 'none',
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => stepLocalEpRate(1)}
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 10,
+                  border: '1px solid var(--border)',
+                  background: 'var(--surface-2)',
+                  color: 'var(--text)',
+                  fontSize: 18,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontFamily: 'inherit',
+                }}
+              >
+                +
+              </button>
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--text-3)', lineHeight: 1.6 }}>
+              Для {group} групи тут доступні лише цілі значення від {minRate}% до {rateLimit}%.
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--text-3)', lineHeight: 1.6 }}>
+              Якщо не знаєш точну ставку, звір її в рішенні своєї громади або в Е-кабінеті платника.
+              Без цього розрахунок ЄП для {group} групи буде лише орієнтовним.
+            </div>
+          </div>
+        )}
       </div>
 
       {error && (
-        <div style={{ marginTop: 14, padding: '12px 14px', borderRadius: 12, background: 'var(--danger-10)', color: 'var(--danger)', fontSize: 13 }}>
+        <div
+          style={{
+            marginTop: 14,
+            padding: '12px 14px',
+            borderRadius: 12,
+            background: 'var(--danger-10)',
+            color: 'var(--danger)',
+            fontSize: 13,
+          }}
+        >
           {error}
         </div>
       )}
@@ -375,11 +726,20 @@ function BankStep({ onDone }: { onDone: () => void }) {
 
   return (
     <div>
-      <h2 style={{ fontSize: 28, fontWeight: 700, letterSpacing: '-0.03em', margin: '0 0 8px', color: 'var(--text)' }}>
+      <h2
+        style={{
+          fontSize: 28,
+          fontWeight: 700,
+          letterSpacing: '-0.03em',
+          margin: '0 0 8px',
+          color: 'var(--text)',
+        }}
+      >
         Підключи свій банк
       </h2>
       <p style={{ margin: '0 0 22px', fontSize: 14, color: 'var(--text-3)', lineHeight: 1.6 }}>
-        Monobank уже працює повністю. Інші банки ми вже готуємо, тому ти зможеш підключити їх трохи пізніше.
+        Monobank уже працює повністю. Інші банки ми вже готуємо, тому ти зможеш підключити їх трохи
+        пізніше.
       </p>
 
       {!selectedBank && (
@@ -438,10 +798,13 @@ function BankStep({ onDone }: { onDone: () => void }) {
               background: 'rgba(99,102,241,0.08)',
             }}
           >
-            <div className="label" style={{ color: 'var(--indigo-400)', marginBottom: 10 }}>Monobank token</div>
+            <div className="label" style={{ color: 'var(--indigo-400)', marginBottom: 10 }}>
+              Monobank token
+            </div>
             <p style={{ margin: 0, fontSize: 13, color: 'var(--text-2)', lineHeight: 1.65 }}>
-              Токен отримай на <strong style={{ color: 'var(--text)' }}>api.monobank.ua</strong> → Personal token.
-              Після введення підтвердь доступ у застосунку Monobank через push-сповіщення.
+              Токен отримай на <strong style={{ color: 'var(--text)' }}>api.monobank.ua</strong> →
+              Personal token. Після введення підтвердь доступ у застосунку Monobank через
+              push-сповіщення.
             </p>
           </div>
 
@@ -453,13 +816,30 @@ function BankStep({ onDone }: { onDone: () => void }) {
           />
 
           {error && (
-            <div style={{ padding: '12px 14px', borderRadius: 12, background: 'var(--danger-10)', color: 'var(--danger)', fontSize: 13 }}>
+            <div
+              style={{
+                padding: '12px 14px',
+                borderRadius: 12,
+                background: 'var(--danger-10)',
+                color: 'var(--danger)',
+                fontSize: 13,
+              }}
+            >
               {error}
             </div>
           )}
 
           {connected && (
-            <div style={{ padding: '12px 14px', borderRadius: 12, background: 'var(--success-10)', color: 'var(--success)', fontSize: 13, fontWeight: 600 }}>
+            <div
+              style={{
+                padding: '12px 14px',
+                borderRadius: 12,
+                background: 'var(--success-10)',
+                color: 'var(--success)',
+                fontSize: 13,
+                fontWeight: 600,
+              }}
+            >
               ✅ Monobank підключено
             </div>
           )}
@@ -513,7 +893,8 @@ function SuccessStep() {
         Усе готово
       </h2>
       <p style={{ margin: 0, fontSize: 14, color: 'var(--text-3)', lineHeight: 1.65 }}>
-        Переходимо в дашборд. Там уже будуть доступні дедлайни, курс валют і перші дії для роботи з Kasyr.ai.
+        Переходимо в дашборд. Там уже будуть доступні дедлайни, курс валют і перші дії для роботи з
+        Kasyr.ai.
       </p>
     </div>
   )
@@ -522,7 +903,8 @@ function SuccessStep() {
 export function Onboarding() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
-  const { isAuthenticated, entrepreneur, setEntrepreneur, setSessionToken, init } = useAuthStore()
+  const { isAuthenticated, entrepreneur, hasInitialized, setEntrepreneur, setSessionToken, init } =
+    useAuthStore()
   const [step, setStep] = useState(1)
   const [selectedGroup, setSelectedGroup] = useState<TaxGroup>(3)
 
@@ -547,6 +929,8 @@ export function Onboarding() {
   }, [searchParams, setSearchParams, setSessionToken, init])
 
   useEffect(() => {
+    if (!hasInitialized) return
+
     if (isAuthenticated && entrepreneur) {
       navigate('/dashboard', { replace: true })
       return
@@ -555,13 +939,15 @@ export function Onboarding() {
     if (isAuthenticated && !entrepreneur) {
       setStep((current) => Math.max(current, 3))
     }
-  }, [isAuthenticated, entrepreneur, navigate])
+  }, [isAuthenticated, entrepreneur, hasInitialized, navigate])
 
-  const heroCopy = useMemo(() => (
-    step === 1
-      ? 'Почнемо з акаунта, далі швидко налаштуємо профіль ФОП і банк.'
-      : 'Kasyr.ai налаштовується в кілька кроків і не змушує тебе вручну збирати бухгалтерію по різних місцях.'
-  ), [step])
+  const heroCopy = useMemo(
+    () =>
+      step === 1
+        ? 'Почнемо з акаунта, далі швидко налаштуємо профіль ФОП і банк.'
+        : 'Kasyr.ai налаштовується в кілька кроків і не змушує тебе вручну збирати бухгалтерію по різних місцях.',
+    [step],
+  )
 
   return (
     <div
@@ -569,7 +955,8 @@ export function Onboarding() {
         minHeight: '100vh',
         display: 'grid',
         gridTemplateColumns: 'minmax(0, 1fr)',
-        background: 'radial-gradient(circle at top, rgba(99,102,241,0.16), transparent 38%), var(--bg)',
+        background:
+          'radial-gradient(circle at top, rgba(99,102,241,0.16), transparent 38%), var(--bg)',
         padding: '20px',
       }}
     >
@@ -599,10 +986,26 @@ export function Onboarding() {
           >
             BETA
           </div>
-          <h1 style={{ margin: '0 0 14px', fontSize: 'clamp(28px, 6vw, 52px)', lineHeight: 1.02, letterSpacing: '-0.05em', color: 'var(--text)' }}>
+          <h1
+            style={{
+              margin: '0 0 14px',
+              fontSize: 'clamp(28px, 6vw, 52px)',
+              lineHeight: 1.02,
+              letterSpacing: '-0.05em',
+              color: 'var(--text)',
+            }}
+          >
             Бухгалтерія ФОП без зайвої рутини.
           </h1>
-          <p style={{ margin: 0, maxWidth: 540, fontSize: 16, color: 'var(--text-2)', lineHeight: 1.75 }}>
+          <p
+            style={{
+              margin: 0,
+              maxWidth: 540,
+              fontSize: 16,
+              color: 'var(--text-2)',
+              lineHeight: 1.75,
+            }}
+          >
             {heroCopy}
           </p>
         </section>
@@ -638,11 +1041,27 @@ export function Onboarding() {
               >
                 <Sparkles size={30} />
               </div>
-              <h2 style={{ fontSize: 30, fontWeight: 700, letterSpacing: '-0.03em', margin: '0 0 10px', color: 'var(--text)' }}>
+              <h2
+                style={{
+                  fontSize: 30,
+                  fontWeight: 700,
+                  letterSpacing: '-0.03em',
+                  margin: '0 0 10px',
+                  color: 'var(--text)',
+                }}
+              >
                 Підготуємо Kasyr.ai під твій ФОП
               </h2>
-              <p style={{ margin: '0 0 24px', fontSize: 14, color: 'var(--text-3)', lineHeight: 1.65 }}>
-                Створимо акаунт, виберемо групу, збережемо дані ФОП і за бажанням одразу підключимо банк.
+              <p
+                style={{
+                  margin: '0 0 24px',
+                  fontSize: 14,
+                  color: 'var(--text-3)',
+                  lineHeight: 1.65,
+                }}
+              >
+                Створимо акаунт, виберемо групу, збережемо дані ФОП і за бажанням одразу підключимо
+                банк.
               </p>
               <Button full size="lg" trailing={<ArrowRight size={16} />} onClick={() => setStep(2)}>
                 Почати
@@ -651,7 +1070,14 @@ export function Onboarding() {
           )}
 
           {step === 2 && <AuthStep onDone={() => setStep(3)} />}
-          {step === 3 && <GroupStep onDone={(group) => { setSelectedGroup(group); setStep(4) }} />}
+          {step === 3 && (
+            <GroupStep
+              onDone={(group) => {
+                setSelectedGroup(group)
+                setStep(4)
+              }}
+            />
+          )}
           {step === 4 && (
             <EntrepreneurStep
               group={selectedGroup}

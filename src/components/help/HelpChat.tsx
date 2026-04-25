@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { MessageCircle, Send, X } from 'lucide-react'
 import client from '../../api/client'
 import { Button } from '../ui/Button'
@@ -19,10 +19,6 @@ export function HelpChat() {
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
 
-  const isMobile = useMemo(() => (
-    typeof window !== 'undefined' ? window.innerWidth < 768 : false
-  ), [])
-
   const handleSend = async () => {
     const message = input.trim()
     if (!message || isLoading) return
@@ -34,11 +30,16 @@ export function HelpChat() {
     try {
       const response = await client.post<{ message: string }>('/api/help/chat', { message })
       setMessages((current) => [...current, { role: 'assistant', content: response.data.message }])
-    } catch {
-      setMessages((current) => [
-        ...current,
-        { role: 'assistant', content: 'Не вдалося отримати відповідь. Спробуй ще раз трохи пізніше.' },
-      ])
+    } catch (error) {
+      const status = (error as { response?: { status?: number } })?.response?.status
+      const reply =
+        status === 401
+          ? 'Для чату потрібно увійти в акаунт.'
+          : status === 503
+            ? 'AI-помічник тимчасово недоступний.'
+            : 'Не вдалося отримати відповідь. Спробуй ще раз.'
+
+      setMessages((current) => [...current, { role: 'assistant', content: reply }])
     } finally {
       setIsLoading(false)
     }
@@ -48,11 +49,8 @@ export function HelpChat() {
     <>
       {open && (
         <div
+          className="fixed z-[60] left-auto right-2 bottom-[calc(env(safe-area-inset-bottom,0px)+144px)] w-[calc(100vw-16px)] md:left-auto md:right-4 md:bottom-6 md:w-[min(360px,calc(100vw-24px))]"
           style={{
-            position: 'fixed',
-            right: 16,
-            bottom: isMobile ? 88 : 24,
-            width: 'min(360px, calc(100vw - 24px))',
             maxHeight: 'min(72vh, 560px)',
             background: 'var(--surface)',
             border: '1px solid var(--border)',
@@ -75,18 +73,36 @@ export function HelpChat() {
             }}
           >
             <div>
-              <div className="label" style={{ color: 'var(--indigo-400)' }}>Kasyr.ai Help</div>
-              <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)' }}>Чат-помічник</div>
+              <div className="label" style={{ color: 'var(--indigo-400)' }}>
+                Kasyr.ai Help
+              </div>
+              <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)' }}>
+                Чат-помічник
+              </div>
             </div>
             <button
               onClick={() => setOpen(false)}
-              style={{ border: 'none', background: 'transparent', color: 'var(--text-3)', cursor: 'pointer' }}
+              style={{
+                border: 'none',
+                background: 'transparent',
+                color: 'var(--text-3)',
+                cursor: 'pointer',
+              }}
             >
               <X size={18} />
             </button>
           </div>
 
-          <div style={{ padding: 16, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, flex: 1 }}>
+          <div
+            style={{
+              padding: 16,
+              overflowY: 'auto',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 10,
+              flex: 1,
+            }}
+          >
             {messages.map((message, index) => (
               <div
                 key={`${message.role}-${index}`}
@@ -111,7 +127,13 @@ export function HelpChat() {
             )}
           </div>
 
-          <div style={{ display: 'flex', gap: 8, padding: 14, borderTop: '1px solid var(--border)' }}>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault()
+              handleSend()
+            }}
+            style={{ display: 'flex', gap: 8, padding: 14, borderTop: '1px solid var(--border)' }}
+          >
             <input
               value={input}
               onChange={(event) => setInput(event.target.value)}
@@ -135,17 +157,15 @@ export function HelpChat() {
                 outline: 'none',
               }}
             />
-            <Button onClick={handleSend} disabled={!input.trim() || isLoading} icon={<Send size={16} />} />
-          </div>
+            <Button type="submit" disabled={!input.trim() || isLoading} icon={<Send size={16} />} />
+          </form>
         </div>
       )}
 
       <button
         onClick={() => setOpen((current) => !current)}
+        className="fixed z-[59] left-auto right-4 bottom-[calc(env(safe-area-inset-bottom,0px)+84px)] md:left-auto md:right-4 md:bottom-6"
         style={{
-          position: 'fixed',
-          right: 16,
-          bottom: isMobile ? 88 : 24,
           width: 54,
           height: 54,
           borderRadius: '50%',

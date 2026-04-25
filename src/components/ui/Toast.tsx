@@ -1,7 +1,8 @@
+/* eslint-disable react-refresh/only-export-components */
 import { useEffect, useState } from 'react'
-import { CheckCircle, XCircle, X } from 'lucide-react'
+import { AlertTriangle, CheckCircle, XCircle, X } from 'lucide-react'
 
-export type ToastType = 'success' | 'error' | 'info'
+export type ToastType = 'success' | 'error' | 'info' | 'warn'
 
 interface ToastItem {
   id: number
@@ -38,14 +39,16 @@ export function ToastProvider() {
         <div key={t.id} style={{
           display: 'flex', alignItems: 'center', gap: 10,
           padding: '12px 16px', borderRadius: 12, minWidth: 260, maxWidth: 360,
-          background: t.type === 'error' ? 'rgba(239,68,68,0.12)' : t.type === 'info' ? 'rgba(56,189,248,0.12)' : 'rgba(16,185,129,0.12)',
-          border: `1px solid ${t.type === 'error' ? 'rgba(239,68,68,0.3)' : t.type === 'info' ? 'rgba(56,189,248,0.3)' : 'rgba(16,185,129,0.3)'}`,
+          background: t.type === 'error' ? 'rgba(239,68,68,0.12)' : t.type === 'warn' ? 'rgba(245,158,11,0.12)' : t.type === 'info' ? 'rgba(56,189,248,0.12)' : 'rgba(16,185,129,0.12)',
+          border: `1px solid ${t.type === 'error' ? 'rgba(239,68,68,0.3)' : t.type === 'warn' ? 'rgba(245,158,11,0.3)' : t.type === 'info' ? 'rgba(56,189,248,0.3)' : 'rgba(16,185,129,0.3)'}`,
           boxShadow: '0 4px 24px rgba(0,0,0,0.3)',
           backdropFilter: 'blur(12px)',
         }}>
           {t.type === 'error'
             ? <XCircle size={16} color="var(--danger)" />
-            : <CheckCircle size={16} color={t.type === 'info' ? 'var(--info)' : 'var(--success)'} />
+            : t.type === 'warn'
+              ? <AlertTriangle size={16} color="var(--warn)" />
+              : <CheckCircle size={16} color={t.type === 'info' ? 'var(--info)' : 'var(--success)'} />
           }
           <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', flex: 1 }}>{t.message}</span>
           <button

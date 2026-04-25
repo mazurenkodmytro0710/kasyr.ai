@@ -7,9 +7,10 @@ interface HttpError extends Error {
 }
 
 export function errorHandler(err: HttpError, req: Request, res: Response, _next: NextFunction) {
+  const isProd = process.env.NODE_ENV === 'production'
   const status = err.statusCode ?? err.status ?? 500
 
-  if (status === 401 || status === 429) {
+  if (status === 401 || status === 403 || status === 429) {
     logSecurityEvent('http_error', {
       ...getRequestMeta(req),
       status,
@@ -17,8 +18,16 @@ export function errorHandler(err: HttpError, req: Request, res: Response, _next:
     })
   }
 
-  console.error(err)
-  res.status(status).json({
-    error: status >= 500 ? 'Internal server error' : err.message || 'Request failed',
-  })
+  if (!isProd) {
+    console.error(err)
+  } else if (status >= 500) {
+    // Log server errors without stack in production
+    console.error(`[error] ${status} ${req.method} ${req.path}: ${err.message}`)
+  }
+
+  const message = isProd && status >= 500
+    ? 'Внутрішня помилка сервера'
+    : err.message || 'Помилка запиту'
+
+  res.status(status).json({ error: message })
 }

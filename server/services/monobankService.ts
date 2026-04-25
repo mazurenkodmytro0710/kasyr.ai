@@ -1,7 +1,8 @@
 import { and, eq } from 'drizzle-orm'
 import { db } from '../db'
 import { transactions } from '../db/schema'
-import { classifyWithAI } from './aiClassifier'
+import { classifyByRules, classifyWithAI } from './aiClassifier'
+import { consumeAiQuota } from './aiQuotaService'
 
 interface MonoAccount {
   id: string
@@ -86,15 +87,23 @@ export async function verifyToken(token: string): Promise<MonoClientInfo> {
   return value
 }
 
-export async function syncMonobank(token: string, accountId: number, lastSync: string | null): Promise<number> {
+const MONO_MAX_RANGE = 31 * 24 * 60 * 60 // Monobank allows max 31 days per request
+
+export async function syncMonobank(
+  token: string,
+  accountId: number,
+  lastSync: string | null,
+  options?: { userId?: number; allowAi?: boolean },
+): Promise<number> {
   const clientInfo = await verifyToken(token)
   const monoAccount = clientInfo.accounts.find((account) => account.currencyCode === 980) ?? clientInfo.accounts[0]
   if (!monoAccount) return 0
 
   const now = Math.floor(Date.now() / 1000)
+  // Always cap to 31 days max — Monobank will return 400 for longer ranges
   const from = lastSync
-    ? Math.max(Math.floor(new Date(lastSync).getTime() / 1000) - 60, now - 31 * 24 * 60 * 60)
-    : now - 90 * 24 * 60 * 60
+    ? Math.max(Math.floor(new Date(lastSync).getTime() / 1000) - 60, now - MONO_MAX_RANGE)
+    : now - MONO_MAX_RANGE
 
   const statement = await getStatement(token, monoAccount.id, from, now)
   let inserted = 0
@@ -113,7 +122,14 @@ export async function syncMonobank(token: string, accountId: number, lastSync: s
     const exchangeRate = item.currencyCode !== 980 && item.operationAmount
       ? Math.abs(item.amount) / Math.abs(item.operationAmount)
       : null
-    const category = (await classifyWithAI(item.description, signedAmount, currency)).category
+    let category = classifyByRules(item.description, signedAmount).category
+    const allowAi = Boolean(options?.allowAi && options?.userId && process.env.GROK_API_KEY)
+    if (allowAi) {
+      const quota = consumeAiQuota(options!.userId!, 1)
+      if (quota.allowed) {
+        category = (await classifyWithAI(item.description, signedAmount, currency)).category
+      }
+    }
 
     await db.insert(transactions).values({
       accountId,

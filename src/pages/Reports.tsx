@@ -4,12 +4,13 @@ import client from '../api/client'
 import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
 import { toast } from '../components/ui/Toast'
+import { useAuthStore } from '../store/authStore'
 import { useUserStore } from '../store/userStore'
 import type { IncomePeriodData, Report } from '../types'
 import { formatNumber } from '../utils/formatCurrency'
 
 function statusLabel(report: Report | undefined, hasData: boolean) {
-  if (report?.status === 'submitted') return { text: 'Надісланий', tone: 'income' as const }
+  if (report?.status === 'submitted') return { text: 'Експортовано', tone: 'income' as const }
   if (report) return { text: 'Готовий', tone: 'neutral' as const }
   if (hasData) return { text: 'Чернетка', tone: 'warn' as const }
   return { text: 'Чернетка', tone: 'neutral' as const }
@@ -29,21 +30,35 @@ async function downloadPdf(period: string) {
   const url = URL.createObjectURL(blob)
   const anchor = document.createElement('a')
   anchor.href = url
-  anchor.download = `report-${period}.pdf`
+  anchor.download = `financial-report-${period}.pdf`
   anchor.click()
   URL.revokeObjectURL(url)
 }
 
+function handleExport(year: number, quarter?: number) {
+  const params = new URLSearchParams({ year: String(year) })
+  if (quarter) params.set('quarter', String(quarter))
+
+  const apiUrl = import.meta.env.VITE_API_URL || ''
+  window.open(
+    `${apiUrl}/api/exports/accountant?${params.toString()}`,
+    '_blank',
+    'noopener,noreferrer',
+  )
+}
+
 export function Reports() {
+  const { entrepreneur } = useAuthStore()
   const { reports, fetchReports, submitReport } = useUserStore()
   const [incomeData, setIncomeData] = useState<IncomePeriodData | null>(null)
   const [loadingPeriod, setLoadingPeriod] = useState(false)
   const [preparing, setPreparing] = useState(false)
   const currentYear = new Date().getFullYear()
   const currentQuarter = Math.ceil((new Date().getMonth() + 1) / 3)
-  const periods = useMemo(() => (
-    Array.from({ length: currentQuarter }, (_, index) => `Q${index + 1}-${currentYear}`)
-  ), [currentQuarter, currentYear])
+  const periods = useMemo(
+    () => Array.from({ length: currentQuarter }, (_, index) => `Q${index + 1}-${currentYear}`),
+    [currentQuarter, currentYear],
+  )
   const [selectedPeriod, setSelectedPeriod] = useState(periods.at(-1) ?? `Q1-${currentYear}`)
 
   useEffect(() => {
@@ -52,7 +67,8 @@ export function Reports() {
 
   useEffect(() => {
     setLoadingPeriod(true)
-    client.get<IncomePeriodData>('/api/dashboard/income', { params: { period: selectedPeriod } })
+    client
+      .get<IncomePeriodData>('/api/dashboard/income', { params: { period: selectedPeriod } })
       .then((response) => setIncomeData(response.data))
       .catch(() => setIncomeData(null))
       .finally(() => setLoadingPeriod(false))
@@ -60,12 +76,18 @@ export function Reports() {
 
   const activeReport = reports.find((report) => report.period === selectedPeriod)
   const activeStatus = statusLabel(activeReport, Boolean(incomeData?.txCount))
+  const [selectedQuarterLabel, selectedYearLabel] = selectedPeriod.split('-')
+  const exportQuarter = Number(selectedQuarterLabel?.replace('Q', ''))
+  const exportYear = Number(selectedYearLabel)
 
   const handlePrepare = async () => {
     setPreparing(true)
     try {
       if (!activeReport) {
-        await client.post('/api/reports/generate', { period: selectedPeriod, type: 'ep_declaration' })
+        await client.post('/api/reports/generate', {
+          period: selectedPeriod,
+          type: 'financial_report',
+        })
       }
       await fetchReports()
       toast('Звіт підготовлено ✓')
@@ -79,13 +101,43 @@ export function Reports() {
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: '24px 20px 96px', maxWidth: 980 }}>
       <div style={{ marginBottom: 26 }}>
-        <div className="label" style={{ color: 'var(--indigo-400)' }}>Звіти</div>
-        <h1 style={{ fontSize: 30, fontWeight: 700, letterSpacing: '-0.03em', margin: '6px 0 10px', color: 'var(--text)' }}>
-          Квартальна звітність
+        <div className="label" style={{ color: 'var(--indigo-400)' }}>
+          Звіти
+        </div>
+        <h1
+          style={{
+            fontSize: 30,
+            fontWeight: 700,
+            letterSpacing: '-0.03em',
+            margin: '6px 0 10px',
+            color: 'var(--text)',
+          }}
+        >
+          Фінансовий звіт за квартал
         </h1>
         <p style={{ margin: 0, fontSize: 14, color: 'var(--text-3)', lineHeight: 1.6 }}>
-          Обирай квартал, перевіряй реальні дані з бази і формуй PDF-звіт для податкової.
+          Обирай квартал, перевіряй реальні дані з бази і формуй допоміжний PDF-звіт для себе,
+          бухгалтера або для звірки перед поданням звітності в Е-кабінеті.
         </p>
+      </div>
+
+      <div
+        style={{
+          marginBottom: 20,
+          padding: '16px 18px',
+          borderRadius: 16,
+          background: 'rgba(245,158,11,0.08)',
+          border: '1px solid rgba(245,158,11,0.18)',
+          fontSize: 13,
+          color: 'var(--text-2)',
+          lineHeight: 1.7,
+        }}
+      >
+        Цей PDF не подається автоматично до ДПС і не замінює офіційну декларацію чи Податковий
+        розрахунок. Його задача — допомогти тобі звірити цифри перед поданням через Е-кабінет.
+        {entrepreneur?.group === 3 &&
+          entrepreneur.vatPayer &&
+          ' Для платника ПДВ суми ПДВ у цьому PDF не розраховуються автоматично і мають звірятися окремо.'}
       </div>
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
@@ -99,7 +151,10 @@ export function Reports() {
               cursor: 'pointer',
               background: selectedPeriod === period ? 'var(--indigo-glow)' : 'var(--surface-2)',
               color: selectedPeriod === period ? 'var(--indigo-300)' : 'var(--text-2)',
-              border: selectedPeriod === period ? '1px solid rgba(129,140,248,0.3)' : '1px solid var(--border)',
+              border:
+                selectedPeriod === period
+                  ? '1px solid rgba(129,140,248,0.3)'
+                  : '1px solid var(--border)',
               fontFamily: 'var(--font-sans)',
               fontSize: 13,
               fontWeight: 600,
@@ -111,31 +166,78 @@ export function Reports() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-3" style={{ marginBottom: 18 }}>
-        <div style={{ padding: 18, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 18 }}>
+        <div
+          style={{
+            padding: 18,
+            background: 'var(--surface)',
+            border: '1px solid var(--border)',
+            borderRadius: 18,
+          }}
+        >
           <div className="label">Статус</div>
           <div style={{ marginTop: 12 }}>
-            <Badge tone={activeStatus.tone} dot>{activeStatus.text}</Badge>
+            <Badge tone={activeStatus.tone} dot>
+              {activeStatus.text}
+            </Badge>
           </div>
         </div>
-        <div style={{ padding: 18, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 18 }}>
+        <div
+          style={{
+            padding: 18,
+            background: 'var(--surface)',
+            border: '1px solid var(--border)',
+            borderRadius: 18,
+          }}
+        >
           <div className="label">Дохід за квартал</div>
-          <div className="tnum" style={{ marginTop: 8, fontSize: 28, fontWeight: 800, color: 'var(--text)' }}>
+          <div
+            className="tnum"
+            style={{ marginTop: 8, fontSize: 28, fontWeight: 800, color: 'var(--text)' }}
+          >
             {loadingPeriod ? '...' : `${formatNumber(incomeData?.uah ?? 0)} ₴`}
           </div>
         </div>
-        <div style={{ padding: 18, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 18 }}>
+        <div
+          style={{
+            padding: 18,
+            background: 'var(--surface)',
+            border: '1px solid var(--border)',
+            borderRadius: 18,
+          }}
+        >
           <div className="label">Транзакції</div>
-          <div className="tnum" style={{ marginTop: 8, fontSize: 28, fontWeight: 800, color: 'var(--text)' }}>
-            {loadingPeriod ? '...' : incomeData?.txCount ?? 0}
+          <div
+            className="tnum"
+            style={{ marginTop: 8, fontSize: 28, fontWeight: 800, color: 'var(--text)' }}
+          >
+            {loadingPeriod ? '...' : (incomeData?.txCount ?? 0)}
           </div>
         </div>
       </div>
 
-      <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 18, padding: 22 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap', marginBottom: 18 }}>
+      <div
+        style={{
+          background: 'var(--surface)',
+          border: '1px solid var(--border)',
+          borderRadius: 18,
+          padding: 22,
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'flex-start',
+            gap: 16,
+            flexWrap: 'wrap',
+            marginBottom: 18,
+          }}
+        >
           <div>
             <div className="label">Вибраний квартал</div>
-            <h2 style={{ margin: '8px 0 6px', fontSize: 22, fontWeight: 700, color: 'var(--text)' }}>
+            <h2
+              style={{ margin: '8px 0 6px', fontSize: 22, fontWeight: 700, color: 'var(--text)' }}
+            >
               {selectedPeriod.replace('-', ' ')}
             </h2>
             <p style={{ margin: 0, fontSize: 13, color: 'var(--text-3)', lineHeight: 1.6 }}>
@@ -143,7 +245,12 @@ export function Reports() {
             </p>
           </div>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            <Button variant="secondary" icon={<FileText size={16} />} loading={preparing} onClick={handlePrepare}>
+            <Button
+              variant="secondary"
+              icon={<FileText size={16} />}
+              loading={preparing}
+              onClick={handlePrepare}
+            >
               Підготувати
             </Button>
             <Button
@@ -160,6 +267,13 @@ export function Reports() {
             >
               Завантажити PDF
             </Button>
+            <Button
+              variant="secondary"
+              icon={<Download size={16} />}
+              onClick={() => handleExport(exportYear, exportQuarter)}
+            >
+              Експорт для бухгалтера
+            </Button>
             {activeReport && activeReport.status !== 'submitted' && (
               <Button
                 variant="ghost"
@@ -167,39 +281,58 @@ export function Reports() {
                 onClick={async () => {
                   try {
                     await submitReport(activeReport.id)
-                    toast('Звіт позначено як надісланий ✓')
+                    toast('PDF позначено як експортований ✓')
                   } catch {
                     toast('Не вдалося змінити статус звіту', 'error')
                   }
                 }}
               >
-                Позначити як надісланий
+                Позначити як експортований
               </Button>
             )}
           </div>
         </div>
 
-        <div style={{ padding: 18, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 16 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+        <div
+          style={{
+            padding: 18,
+            background: 'var(--surface-2)',
+            border: '1px solid var(--border)',
+            borderRadius: 16,
+          }}
+        >
+          <div
+            style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}
+          >
             <div>
-              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>Звіт по декларації ЄП</div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>
+                Фінансовий звіт Kasyr.ai
+              </div>
               <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 4 }}>
-                Станом на зараз статус цього кварталу: {activeStatus.text.toLowerCase()}.
+                Станом на зараз статус цього PDF: {activeStatus.text.toLowerCase()}.
               </div>
             </div>
-            <Badge tone={activeStatus.tone} dot>{activeStatus.text}</Badge>
+            <Badge tone={activeStatus.tone} dot>
+              {activeStatus.text}
+            </Badge>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2" style={{ marginTop: 18 }}>
             <div>
               <div className="label">Оборот</div>
-              <div className="tnum" style={{ marginTop: 8, fontSize: 24, fontWeight: 700, color: 'var(--text)' }}>
+              <div
+                className="tnum"
+                style={{ marginTop: 8, fontSize: 24, fontWeight: 700, color: 'var(--text)' }}
+              >
                 {formatNumber(incomeData?.uah ?? 0)} ₴
               </div>
             </div>
             <div>
               <div className="label">Записів у базі</div>
-              <div className="tnum" style={{ marginTop: 8, fontSize: 24, fontWeight: 700, color: 'var(--text)' }}>
+              <div
+                className="tnum"
+                style={{ marginTop: 8, fontSize: 24, fontWeight: 700, color: 'var(--text)' }}
+              >
                 {incomeData?.txCount ?? 0}
               </div>
             </div>

@@ -1,6 +1,5 @@
 import { formatNumber } from '../../utils/formatCurrency'
 import { Badge } from '../ui/Badge'
-import { TrendingUp } from 'lucide-react'
 
 interface ChartData {
   month: string
@@ -34,28 +33,64 @@ export function IncomeChart({
 
   if (mobile) {
     return (
-      <div style={{ margin: '0 16px 20px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <div className="label">ДОХІД ЦЬОГО КВАРТАЛУ</div>
-          <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{quarter}</span>
+      <div
+        style={{
+          padding: 18,
+          background: 'var(--surface)',
+          border: '1px solid var(--border)',
+          borderRadius: 18,
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: 10,
+            marginBottom: 10,
+            flexWrap: 'wrap',
+          }}
+        >
+          <div className="label">ДОХІД ПО МІСЯЦЯХ · {quarter}</div>
+          {delta !== undefined && (
+            <Badge tone="income" dot>
+              +{delta}%
+            </Badge>
+          )}
         </div>
-        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 18 }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-            <span style={{ fontSize: 20, color: 'var(--text-muted)', fontWeight: 500 }}>₴</span>
-            <span className="tnum" style={{ fontSize: 32, fontWeight: 700, color: 'var(--text)', letterSpacing: '-0.025em', lineHeight: 1 }}>
+
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 6,
+            marginBottom: 14,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, minWidth: 0 }}>
+            <span style={{ fontSize: 18, color: 'var(--text-muted)', fontWeight: 500 }}>₴</span>
+            <span
+              className="tnum"
+              style={{
+                fontSize: 'clamp(28px, 9vw, 34px)',
+                fontWeight: 800,
+                color: 'var(--text)',
+                letterSpacing: '-0.03em',
+                lineHeight: 1.05,
+                whiteSpace: 'nowrap',
+              }}
+            >
               {formatNumber(uah)}
             </span>
           </div>
-          {delta !== undefined && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--success)' }}>
-              <TrendingUp size={14} />
-              <span className="tnum" style={{ fontSize: 13, fontWeight: 600 }}>+{delta}%</span>
-              {usd > 0 && <span style={{ fontSize: 12, color: 'var(--text-3)', marginLeft: 4 }}>${formatNumber(usd)}</span>}
+          {usd > 0 && (
+            <div className="tnum" style={{ fontSize: 12, color: 'var(--text-3)' }}>
+              ≈ ${formatNumber(usd)}
             </div>
           )}
         </div>
         {periodOptions && onPeriodChange && (
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
             {periodOptions.map((option) => (
               <button
                 key={option.value}
@@ -126,7 +161,7 @@ export function IncomeChart({
 
 function MobileBarChart({ months, max }: { months: ChartData[]; max: number }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, height: 64 }}>
+    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 64 }}>
       {months.map((mo, i) => {
         const isActive = mo.amount > 0 && i === 0
         const isProjected = mo.amount === 0
@@ -154,10 +189,11 @@ function MobileBarChart({ months, max }: { months: ChartData[]; max: number }) {
 
 function DesktopLineChart({ months, max }: { months: ChartData[]; max: number }) {
   const W = 520, H = 180, P = 16
-  const allMonths = [...months]
-  while (allMonths.length < 12) allMonths.push({ month: '—', amount: 0 })
+  const visibleMonths = months.filter((month) => month.month !== '—')
+  const allMonths = visibleMonths.length > 0 ? visibleMonths : months
+  const stepCount = Math.max(allMonths.length - 1, 1)
   const pts = allMonths.map((d, i) => ({
-    x: P + (i * (W - P * 2) / (allMonths.length - 1)),
+    x: P + (i * (W - P * 2) / stepCount),
     y: H - P - (d.amount / max) * (H - P * 2),
     v: d.amount,
     m: d.month,
@@ -194,7 +230,7 @@ function DesktopLineChart({ months, max }: { months: ChartData[]; max: number })
             <circle cx={p.x} cy={p.y} r="7" fill="#6366F1" opacity="0.25" />
           </g>
         ))}
-        {realPts.length > 0 && pts[pts.length - 1] && (
+        {realPts.length > 1 && pts[pts.length - 1] && (
           <line
             x1={realPts[realPts.length - 1].x} y1={realPts[realPts.length - 1].y}
             x2={pts[pts.length - 1].x} y2={H - P - 60}

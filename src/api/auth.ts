@@ -17,8 +17,10 @@ export async function login(email: string, password: string): Promise<LoginRespo
   return res.data
 }
 
-export async function getMe(): Promise<{ user: User; entrepreneur: Entrepreneur | null }> {
-  const res = await client.get<{ user: User; entrepreneur: Entrepreneur | null }>('/api/auth/me')
+export async function getMe(): Promise<{ user: User | null; entrepreneur: Entrepreneur | null }> {
+  const res = await client.get<{ user: User | null; entrepreneur: Entrepreneur | null }>(
+    '/api/auth/me',
+  )
   return res.data
 }
 

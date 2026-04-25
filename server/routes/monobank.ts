@@ -5,7 +5,6 @@ import { bankAccounts, entrepreneurs } from '../db/schema'
 import { authMiddleware, type AuthRequest } from '../middleware/auth'
 import { MonoApiError, MonoRateLimitError, syncMonobank, verifyToken } from '../services/monobankService'
 import { encryptToken, decryptToken } from '../utils/crypto'
-import { sanitizeText } from '../utils/sanitize'
 
 const router = Router()
 router.use(authMiddleware)
@@ -17,10 +16,17 @@ router.post('/connect', async (req: AuthRequest, res, next) => {
     if (!ent) return res.status(400).json({ error: 'Complete entrepreneur setup first' })
 
     if (provider === 'monobank') {
-      const cleanToken = sanitizeText(token, 512)
+      const cleanToken = String(token ?? '').replace(/\s+/g, '').slice(0, 512)
       const clientInfo = await verifyToken(cleanToken)
       const primaryAccount = clientInfo.accounts.find(account => account.currencyCode === 980) ?? clientInfo.accounts[0]
       if (!primaryAccount) return res.status(400).json({ error: 'No Monobank accounts found' })
+
+      // Detect if it's a personal account (not FOP)
+      const clientType: string = (clientInfo as { clientId?: string; type?: string }).type ?? ''
+      const isFop = clientType === 'fop'
+      const warning = !isFop
+        ? 'Підключено особистий рахунок. Дані відображаються, але розрахунок податків призначений для ФОП-рахунків.'
+        : undefined
 
       const encrypted = encryptToken(cleanToken)
       const [account] = await db.insert(bankAccounts).values({
@@ -31,7 +37,7 @@ router.post('/connect', async (req: AuthRequest, res, next) => {
         currency: primaryAccount.currencyCode === 980 ? 'UAH' : String(primaryAccount.currencyCode),
         lastSync: null,
       }).returning()
-      return res.json(account)
+      return res.json({ ...account, warning })
     }
 
     res.status(400).json({ error: 'Unsupported provider' })
@@ -40,9 +46,10 @@ router.post('/connect', async (req: AuthRequest, res, next) => {
       return res.status(429).json({ error: 'Monobank дозволяє один запит на 60 секунд. Спробуй трохи пізніше.' })
     }
     if (err instanceof MonoApiError) {
-      const message = err.status === 403
-        ? 'Monobank відхилив токен. Перевір, що він скопійований повністю, або використай demo-token для локального MVP.'
-        : 'Не вдалося підключити Monobank. Спробуй ще раз пізніше.'
+      const message =
+        err.status === 400 || err.status === 403
+          ? 'Monobank відхилив токен. Перевір, що він скопійований повністю і без зайвих пробілів. Особисті та FOP-токени підтримуються.'
+          : 'Не вдалося підключити Monobank. Спробуй ще раз пізніше.'
       return res.status(400).json({ error: message })
     }
     next(err)
@@ -89,7 +96,10 @@ router.post('/sync', async (req: AuthRequest, res, next) => {
       if (acc.provider === 'monobank' && acc.tokenEncrypted) {
         const token = decryptToken(acc.tokenEncrypted)
         try {
-          const synced = await syncMonobank(token, acc.id, acc.lastSync)
+          const synced = await syncMonobank(token, acc.id, acc.lastSync, {
+            userId: req.userId!,
+            allowAi: true,
+          })
           totalSynced += synced
         } catch (error) {
           if (!(error instanceof MonoRateLimitError)) throw error

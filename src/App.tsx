@@ -1,24 +1,35 @@
-import { useEffect } from 'react'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { useEffect, useRef } from 'react'
+import { BrowserRouter, Routes, Route, Navigate, useSearchParams } from 'react-router-dom'
 import { Sidebar } from './components/layout/Sidebar'
 import { BottomNav } from './components/layout/BottomNav'
 import { Header } from './components/layout/Header'
 import { AddTransactionModal } from './components/transactions/AddTransactionModal'
 import { HelpChat } from './components/help/HelpChat'
+import { EmailVerificationGate } from './components/auth/EmailVerificationGate'
 import { Onboarding } from './pages/Onboarding'
 import { Landing } from './pages/Landing'
 import { Dashboard } from './pages/Dashboard'
 import { Transactions } from './pages/Transactions'
 import { Reports } from './pages/Reports'
 import { Deadlines } from './pages/Deadlines'
+import { Feedback } from './pages/Feedback'
 import { Help } from './pages/Help'
+import { VerifyEmail } from './pages/VerifyEmail'
 import { Settings } from './pages/Settings'
 import { useAuthStore } from './store/authStore'
-import { ToastProvider } from './components/ui/Toast'
+import { ToastProvider, toast } from './components/ui/Toast'
 
 function AppLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', overflowX: 'hidden', background: 'var(--bg)' }}>
+    <div
+      style={{
+        display: 'flex',
+        height: '100vh',
+        overflow: 'hidden',
+        overflowX: 'hidden',
+        background: 'var(--bg)',
+      }}
+    >
       {/* Desktop sidebar */}
       <div className="hidden md:flex">
         <Sidebar />
@@ -47,16 +58,27 @@ function AppLayout({ children }: { children: React.ReactNode }) {
 }
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { entrepreneur, isAuthenticated, isLoading, hasInitialized } = useAuthStore()
+  const { entrepreneur, isAuthenticated, isLoading, hasInitialized, user } = useAuthStore()
   if (!hasInitialized || isLoading) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)' }}>
+      <div
+        style={{
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'var(--bg)',
+        }}
+      >
         <div className="spinner" style={{ width: 32, height: 32, borderWidth: 3 }} />
       </div>
     )
   }
   if (!isAuthenticated) {
-    return <Navigate to="/onboarding" replace />
+    return <Navigate to="/" replace />
+  }
+  if (!user?.isVerified) {
+    return <EmailVerificationGate email={user?.email ?? ''} />
   }
   if (!entrepreneur) {
     return <Navigate to="/onboarding" replace />
@@ -66,20 +88,39 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 function AppRoutes() {
   const { init, isAuthenticated } = useAuthStore()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const verifiedShown = useRef(false)
 
   useEffect(() => {
     init()
   }, [init])
 
+  useEffect(() => {
+    if (searchParams.get('verified') === '1' && !verifiedShown.current) {
+      verifiedShown.current = true
+      toast('✅ Email підтверджено — дякуємо!')
+      setSearchParams(
+        (p) => {
+          p.delete('verified')
+          return p
+        },
+        { replace: true },
+      )
+    }
+  }, [searchParams, setSearchParams])
+
   return (
     <Routes>
       <Route path="/" element={<Landing />} />
       <Route path="/onboarding" element={<Onboarding />} />
+      <Route path="/verify-email" element={<VerifyEmail />} />
       <Route
         path="/dashboard"
         element={
           <ProtectedRoute>
-            <AppLayout><Dashboard /></AppLayout>
+            <AppLayout>
+              <Dashboard />
+            </AppLayout>
           </ProtectedRoute>
         }
       />
@@ -87,7 +128,9 @@ function AppRoutes() {
         path="/transactions"
         element={
           <ProtectedRoute>
-            <AppLayout><Transactions /></AppLayout>
+            <AppLayout>
+              <Transactions />
+            </AppLayout>
           </ProtectedRoute>
         }
       />
@@ -95,7 +138,9 @@ function AppRoutes() {
         path="/reports"
         element={
           <ProtectedRoute>
-            <AppLayout><Reports /></AppLayout>
+            <AppLayout>
+              <Reports />
+            </AppLayout>
           </ProtectedRoute>
         }
       />
@@ -103,7 +148,9 @@ function AppRoutes() {
         path="/deadlines"
         element={
           <ProtectedRoute>
-            <AppLayout><Deadlines /></AppLayout>
+            <AppLayout>
+              <Deadlines />
+            </AppLayout>
           </ProtectedRoute>
         }
       />
@@ -111,7 +158,9 @@ function AppRoutes() {
         path="/settings"
         element={
           <ProtectedRoute>
-            <AppLayout><Settings /></AppLayout>
+            <AppLayout>
+              <Settings />
+            </AppLayout>
           </ProtectedRoute>
         }
       />
@@ -119,7 +168,19 @@ function AppRoutes() {
         path="/help"
         element={
           <ProtectedRoute>
-            <AppLayout><Help /></AppLayout>
+            <AppLayout>
+              <Help />
+            </AppLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/feedback"
+        element={
+          <ProtectedRoute>
+            <AppLayout>
+              <Feedback />
+            </AppLayout>
           </ProtectedRoute>
         }
       />

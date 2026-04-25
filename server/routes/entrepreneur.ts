@@ -2,9 +2,15 @@ import { Router } from 'express'
 import { eq } from 'drizzle-orm'
 import { randomUUID } from 'node:crypto'
 import { db } from '../db'
-import { clients, deadlines, entrepreneurs } from '../db/schema'
+import { clients, entrepreneurs } from '../db/schema'
 import { authMiddleware, type AuthRequest } from '../middleware/auth'
-import { generateDeadlinesForYears, type TaxGroup } from '../services/taxService'
+import {
+  getMinLocalEpRatePercent,
+  getTaxProfile,
+  normalizeLocalEpRatePercent,
+  type TaxGroup,
+} from '../services/taxService'
+import { syncDeadlinesForEntrepreneur } from '../services/deadlinesService'
 import { getTelegramBotUrl } from '../services/telegramService'
 import { sanitizeKveds, sanitizeTaxId, sanitizeText } from '../utils/sanitize'
 
@@ -15,6 +21,8 @@ interface EntrepreneurBody {
   fullName?: string
   taxId?: string
   group?: TaxGroup
+  vatPayer?: boolean
+  localEpRatePercent?: number | null
   regDate?: string
   kveds?: string[]
 }
@@ -28,7 +36,10 @@ function serializeEntrepreneur(entrepreneur: typeof entrepreneurs.$inferSelect) 
 
 router.get('/', async (req: AuthRequest, res, next) => {
   try {
-    const [entrepreneur] = await db.select().from(entrepreneurs).where(eq(entrepreneurs.userId, req.userId!))
+    const [entrepreneur] = await db
+      .select()
+      .from(entrepreneurs)
+      .where(eq(entrepreneurs.userId, req.userId!))
     res.json(entrepreneur ? serializeEntrepreneur(entrepreneur) : null)
   } catch (error) {
     next(error)
@@ -42,6 +53,16 @@ router.post('/', async (req: AuthRequest, res, next) => {
     if (![1, 2, 3].includes(group)) {
       return res.status(400).json({ error: 'Invalid tax group' })
     }
+    const rawLocalRate =
+      typeof body.localEpRatePercent === 'number' ? body.localEpRatePercent : null
+    const vatPayer = group === 3 ? Boolean(body.vatPayer) : false
+    const localEpRatePercent =
+      group === 1 || group === 2 ? normalizeLocalEpRatePercent(group, rawLocalRate) : null
+    if ((group === 1 || group === 2) && rawLocalRate != null && localEpRatePercent == null) {
+      return res.status(400).json({
+        error: `Local EP rate must be an integer between ${getMinLocalEpRatePercent(group)} and ${group === 1 ? 10 : 20}%`,
+      })
+    }
     const taxId = sanitizeTaxId(body.taxId)
     if (!taxId || !/^\d{10}$/.test(taxId)) {
       return res.status(400).json({ error: 'Tax ID must contain 10 digits' })
@@ -51,26 +72,38 @@ router.post('/', async (req: AuthRequest, res, next) => {
       return res.status(400).json({ error: 'Registration date is required' })
     }
 
-    const [existing] = await db.select().from(entrepreneurs).where(eq(entrepreneurs.userId, req.userId!))
+    const [existing] = await db
+      .select()
+      .from(entrepreneurs)
+      .where(eq(entrepreneurs.userId, req.userId!))
     const values = {
       userId: req.userId!,
       fullName: sanitizeText(body.fullName || existing?.fullName || 'Марія Коваленко', 120),
       taxId,
       group,
+      vatPayer,
+      localEpRatePercent,
       regDate,
-      kveds: JSON.stringify(sanitizeKveds(body.kveds).length ? sanitizeKveds(body.kveds) : ['62.01', '62.02']),
+      kveds: JSON.stringify(sanitizeKveds(body.kveds)),
+      // Beta: all newly created entrepreneur profiles start on Business.
+      subscriptionTier: existing?.subscriptionTier ?? 'business',
     }
 
     const [entrepreneur] = existing
-      ? await db.update(entrepreneurs).set(values).where(eq(entrepreneurs.id, existing.id)).returning()
+      ? await db
+          .update(entrepreneurs)
+          .set(values)
+          .where(eq(entrepreneurs.id, existing.id))
+          .returning()
       : await db.insert(entrepreneurs).values(values).returning()
 
     if (!entrepreneur) return res.status(500).json({ error: 'Failed to save entrepreneur' })
 
-    if (!existing) {
-      const year = new Date().getFullYear()
-      await db.insert(deadlines).values(generateDeadlinesForYears(entrepreneur.id, group, [year, year + 1]))
-    }
+    const year = new Date().getFullYear()
+    await syncDeadlinesForEntrepreneur(entrepreneur.id, getTaxProfile(entrepreneur), [
+      year,
+      year + 1,
+    ])
 
     res.json(serializeEntrepreneur(entrepreneur))
   } catch (error) {
@@ -78,9 +111,57 @@ router.post('/', async (req: AuthRequest, res, next) => {
   }
 })
 
+router.patch('/tax-profile', async (req: AuthRequest, res, next) => {
+  try {
+    const [entrepreneur] = await db
+      .select()
+      .from(entrepreneurs)
+      .where(eq(entrepreneurs.userId, req.userId!))
+    if (!entrepreneur) return res.status(404).json({ error: 'Entrepreneur not found' })
+
+    const rawLocalRate =
+      typeof req.body['localEpRatePercent'] === 'number' ? req.body['localEpRatePercent'] : null
+    const vatPayer = entrepreneur.group === 3 ? Boolean(req.body['vatPayer']) : false
+    const localEpRatePercent =
+      entrepreneur.group === 1 || entrepreneur.group === 2
+        ? normalizeLocalEpRatePercent(entrepreneur.group as 1 | 2, rawLocalRate)
+        : null
+    if (
+      (entrepreneur.group === 1 || entrepreneur.group === 2) &&
+      rawLocalRate != null &&
+      localEpRatePercent == null
+    ) {
+      return res.status(400).json({
+        error: `Local EP rate must be an integer between ${getMinLocalEpRatePercent(entrepreneur.group as 1 | 2)} and ${entrepreneur.group === 1 ? 10 : 20}%`,
+      })
+    }
+
+    const [updated] = await db
+      .update(entrepreneurs)
+      .set({
+        vatPayer,
+        localEpRatePercent,
+      })
+      .where(eq(entrepreneurs.id, entrepreneur.id))
+      .returning()
+
+    if (!updated) return res.status(404).json({ error: 'Entrepreneur not found' })
+
+    const year = new Date().getFullYear()
+    await syncDeadlinesForEntrepreneur(updated.id, getTaxProfile(updated), [year, year + 1])
+
+    res.json(serializeEntrepreneur(updated))
+  } catch (error) {
+    next(error)
+  }
+})
+
 router.get('/clients', async (req: AuthRequest, res, next) => {
   try {
-    const [entrepreneur] = await db.select().from(entrepreneurs).where(eq(entrepreneurs.userId, req.userId!))
+    const [entrepreneur] = await db
+      .select()
+      .from(entrepreneurs)
+      .where(eq(entrepreneurs.userId, req.userId!))
     if (!entrepreneur) return res.json([])
 
     const rows = await db.select().from(clients).where(eq(clients.entrepreneurId, entrepreneur.id))
@@ -92,7 +173,10 @@ router.get('/clients', async (req: AuthRequest, res, next) => {
 
 router.patch('/preferences', async (req: AuthRequest, res, next) => {
   try {
-    const [entrepreneur] = await db.select().from(entrepreneurs).where(eq(entrepreneurs.userId, req.userId!))
+    const [entrepreneur] = await db
+      .select()
+      .from(entrepreneurs)
+      .where(eq(entrepreneurs.userId, req.userId!))
     if (!entrepreneur) return res.status(404).json({ error: 'Entrepreneur not found' })
 
     const nextTier = sanitizeText(req.body['subscriptionTier'], 16).toLowerCase()
@@ -105,7 +189,8 @@ router.patch('/preferences', async (req: AuthRequest, res, next) => {
       .set({
         subscriptionTier: tier,
         emailNotifications: req.body['emailNotifications'] ?? entrepreneur.emailNotifications,
-        telegramNotifications: req.body['telegramNotifications'] ?? entrepreneur.telegramNotifications,
+        telegramNotifications:
+          req.body['telegramNotifications'] ?? entrepreneur.telegramNotifications,
       })
       .where(eq(entrepreneurs.id, entrepreneur.id))
       .returning()
@@ -119,7 +204,10 @@ router.patch('/preferences', async (req: AuthRequest, res, next) => {
 
 router.post('/telegram-link', async (req: AuthRequest, res, next) => {
   try {
-    const [entrepreneur] = await db.select().from(entrepreneurs).where(eq(entrepreneurs.userId, req.userId!))
+    const [entrepreneur] = await db
+      .select()
+      .from(entrepreneurs)
+      .where(eq(entrepreneurs.userId, req.userId!))
     if (!entrepreneur) return res.status(404).json({ error: 'Entrepreneur not found' })
 
     const linkToken = entrepreneur.telegramLinkToken || randomUUID()
@@ -142,7 +230,10 @@ router.post('/telegram-link', async (req: AuthRequest, res, next) => {
 
 router.delete('/telegram-link', async (req: AuthRequest, res, next) => {
   try {
-    const [entrepreneur] = await db.select().from(entrepreneurs).where(eq(entrepreneurs.userId, req.userId!))
+    const [entrepreneur] = await db
+      .select()
+      .from(entrepreneurs)
+      .where(eq(entrepreneurs.userId, req.userId!))
     if (!entrepreneur) return res.status(404).json({ error: 'Entrepreneur not found' })
 
     const [updated] = await db

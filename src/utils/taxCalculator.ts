@@ -1,49 +1,102 @@
 import type { TaxGroup } from '../types'
 
-const ESV_MONTHLY = 1902.34
-const EP_RATE_GROUP3 = 0.05
-const VZ_RATE = 0.01
-const EP_MONTHLY_GROUP2 = 1729.40
-const VZ_MONTHLY_GROUP2 = 864.70
+interface TaxProfileOptions {
+  vatPayer?: boolean
+  localEpRatePercent?: number | null
+}
+
+interface TaxConfig {
+  minWage: number
+  livingWage: number
+}
+
+const TAX_CONFIG_BY_YEAR: Record<number, TaxConfig> = {
+  2026: {
+    minWage: 8647,
+    livingWage: 3328,
+  },
+}
+
+function roundCurrency(value: number): number {
+  return Math.round(value * 100) / 100
+}
+
+function getTaxConfig(year = new Date().getFullYear()): TaxConfig {
+  const knownYears = Object.keys(TAX_CONFIG_BY_YEAR)
+    .map(Number)
+    .sort((a, b) => a - b)
+  const fallbackYear = knownYears.find((knownYear) => knownYear >= year) ?? knownYears.at(-1) ?? 2026
+  return TAX_CONFIG_BY_YEAR[year] ?? TAX_CONFIG_BY_YEAR[fallbackYear]!
+}
+
+function getFixedMonthlyTaxes(group: 1 | 2, year = new Date().getFullYear(), localEpRatePercent?: number | null) {
+  const config = getTaxConfig(year)
+  const esvMonthly = roundCurrency(config.minWage * 0.22)
+  const vzMonthly = roundCurrency(config.minWage * 0.1)
+  const maxRate = group === 1 ? 10 : 20
+  const rate = typeof localEpRatePercent === 'number' && localEpRatePercent >= 0 && localEpRatePercent <= maxRate
+    ? localEpRatePercent
+    : maxRate
+  const epMonthly = group === 1
+    ? roundCurrency(config.livingWage * (rate / 100))
+    : roundCurrency(config.minWage * (rate / 100))
+
+  return { epMonthly, esvMonthly, vzMonthly }
+}
 
 export function calculateTaxes(
   group: TaxGroup,
-  quarterIncome: number
+  quarterIncome: number,
+  year = new Date().getFullYear(),
+  options: TaxProfileOptions = {},
 ): { ep: number; esv: number; vz: number; total: number } {
-  const esv = ESV_MONTHLY * 3
+  const esv = roundCurrency(getTaxConfig(year).minWage * 0.22 * 3)
 
   if (group === 3) {
-    const ep = Math.round(quarterIncome * EP_RATE_GROUP3)
-    const vz = Math.round(quarterIncome * VZ_RATE)
-    return { ep, esv: Math.round(esv), vz, total: ep + Math.round(esv) + vz }
+    const ep = roundCurrency(quarterIncome * (options.vatPayer ? 0.03 : 0.05))
+    const vz = roundCurrency(quarterIncome * 0.01)
+    return { ep, esv, vz, total: roundCurrency(ep + esv + vz) }
   }
 
-  if (group === 2) {
-    const ep = Math.round(EP_MONTHLY_GROUP2 * 3)
-    const vz = Math.round(VZ_MONTHLY_GROUP2 * 3)
-    return { ep, esv: Math.round(esv), vz, total: ep + Math.round(esv) + vz }
-  }
+  const fixed = getFixedMonthlyTaxes(group, year, options.localEpRatePercent)
+  const ep = roundCurrency(fixed.epMonthly * 3)
+  const vz = roundCurrency(fixed.vzMonthly * 3)
+  return { ep, esv, vz, total: roundCurrency(ep + esv + vz) }
+}
 
-  // Group 1 - simplified
-  const ep = Math.round(302.8 * 3)
-  const vz = Math.round(302.8 * 3 * 0.01)
-  return { ep, esv: Math.round(esv), vz, total: ep + Math.round(esv) + vz }
+function formatIsoDate(date: Date): string {
+  return date.toISOString().slice(0, 10)
+}
+
+function shiftWeekend(date: Date): Date {
+  const shifted = new Date(date.getTime())
+  while (shifted.getUTCDay() === 0 || shifted.getUTCDay() === 6) {
+    shifted.setUTCDate(shifted.getUTCDate() + 1)
+  }
+  return shifted
+}
+
+function addUtcDays(date: Date, days: number): Date {
+  const next = new Date(date.getTime())
+  next.setUTCDate(next.getUTCDate() + days)
+  return next
+}
+
+function quarterEndDate(year: number, quarter: 1 | 2 | 3 | 4): Date {
+  return new Date(Date.UTC(year, quarter * 3, 0))
+}
+
+function parseDateOnly(value: string): Date {
+  const [year, month, day] = value.split('-').map(Number)
+  return new Date(Date.UTC(year ?? 1970, (month ?? 1) - 1, day ?? 1))
 }
 
 export function getQuarterDeadlines(
   year: number,
-  quarter: 1 | 2 | 3 | 4
+  quarter: 1 | 2 | 3 | 4,
 ): { declarationDue: string; paymentDue: string } {
-  const months: Record<number, { dec: [number, number]; pay: [number, number] }> = {
-    1: { dec: [5, 9], pay: [5, 20] },
-    2: { dec: [8, 9], pay: [8, 20] },
-    3: { dec: [11, 9], pay: [11, 20] },
-    4: { dec: [2, 9], pay: [2, 19] },
-  }
-  const q = months[quarter]
-  const dueYear = year + (quarter === 4 ? 1 : 0)
-  return {
-    declarationDue: `${dueYear}-${String(q.dec[0]).padStart(2, '0')}-${String(q.dec[1]).padStart(2, '0')}`,
-    paymentDue: `${dueYear}-${String(q.pay[0]).padStart(2, '0')}-${String(q.pay[1]).padStart(2, '0')}`,
-  }
+  const declarationDue = formatIsoDate(shiftWeekend(addUtcDays(quarterEndDate(year, quarter), 40)))
+  const paymentDue = formatIsoDate(shiftWeekend(addUtcDays(parseDateOnly(declarationDue), 10)))
+
+  return { declarationDue, paymentDue }
 }

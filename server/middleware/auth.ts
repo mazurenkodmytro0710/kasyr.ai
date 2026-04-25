@@ -10,6 +10,22 @@ export interface AuthRequest extends Request {
   userId?: number
 }
 
+export async function resolveAuthUserId(req: Request): Promise<number | null> {
+  const bearerToken = readBearerToken(req.headers.authorization)
+  const cookieToken = req.signedCookies?.[AUTH_COOKIE_NAME] ?? req.cookies?.[AUTH_COOKIE_NAME]
+  const token = bearerToken ?? cookieToken
+
+  if (!token) return null
+
+  try {
+    const payload = jwt.verify(token, process.env.JWT_SECRET ?? 'dev-secret') as { userId: number }
+    const [user] = await db.select({ id: users.id }).from(users).where(eq(users.id, payload.userId))
+    return user?.id ?? null
+  } catch {
+    return null
+  }
+}
+
 export async function authMiddleware(req: AuthRequest, res: Response, next: NextFunction) {
   const bearerToken = readBearerToken(req.headers.authorization)
   const cookieToken = req.signedCookies?.[AUTH_COOKIE_NAME] ?? req.cookies?.[AUTH_COOKIE_NAME]

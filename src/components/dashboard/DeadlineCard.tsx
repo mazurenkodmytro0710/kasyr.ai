@@ -11,33 +11,58 @@ const typeLabels: Record<string, string> = {
   ep_payment: 'Сплата ЄП',
   esv: 'Єдиний соц. внесок',
   vz: 'Військовий збір',
-  combined_report: 'Квартальний ЄП + ЄСВ + ВЗ',
+  combined_report: 'Податковий розрахунок',
 }
 
 export function DeadlineCard({ deadline }: DeadlineCardProps) {
   const days = daysUntil(deadline.dueDate)
   const urgent = days <= 14 && days >= 0
-  const overdue = days < 0 && deadline.status === 'pending'
+  const overdue = days < 0 && (deadline.status === 'pending' || deadline.status === 'overdue')
 
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px',
-      background: 'var(--surface-2)', borderRadius: 10,
-      border: '1px solid var(--border)',
-    }}>
-      <div style={{
-        width: 42, height: 42, borderRadius: 10, flexShrink: 0,
-        background: urgent ? 'var(--warn-10)' : overdue ? 'var(--danger-10)' : 'var(--surface-3)',
-        color: urgent ? 'var(--warn)' : overdue ? 'var(--danger)' : 'var(--text-2)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column',
-      }}>
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+        padding: '12px 14px',
+        background: 'var(--surface-2)',
+        borderRadius: 10,
+        border: '1px solid var(--border)',
+      }}
+    >
+      <div
+        style={{
+          width: 42,
+          height: 42,
+          borderRadius: 10,
+          flexShrink: 0,
+          background: urgent ? 'var(--warn-10)' : overdue ? 'var(--danger-10)' : 'var(--surface-3)',
+          color: urgent ? 'var(--warn)' : overdue ? 'var(--danger)' : 'var(--text-2)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexDirection: 'column',
+        }}
+      >
         {deadline.status === 'paid' || deadline.status === 'submitted' ? (
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--success)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="var(--success)"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
             <polyline points="20 6 9 17 4 12" />
           </svg>
         ) : (
           <>
-            <div className="tnum" style={{ fontSize: 15, fontWeight: 700, lineHeight: 1 }}>{Math.abs(days)}</div>
+            <div className="tnum" style={{ fontSize: 15, fontWeight: 700, lineHeight: 1 }}>
+              {Math.abs(days)}
+            </div>
             <div style={{ fontSize: 8, letterSpacing: 0.5, marginTop: 2 }}>ДНІВ</div>
           </>
         )}
@@ -54,7 +79,10 @@ export function DeadlineCard({ deadline }: DeadlineCardProps) {
         </div>
       </div>
       {deadline.amount != null && deadline.amount > 0 && (
-        <div className="tnum" style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', flexShrink: 0 }}>
+        <div
+          className="tnum"
+          style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', flexShrink: 0 }}
+        >
           {formatNumber(deadline.amount)} <span style={{ color: 'var(--text-muted)' }}>₴</span>
         </div>
       )}

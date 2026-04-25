@@ -5,6 +5,8 @@ export interface EntrepreneurPayload {
   fullName?: string
   taxId: string
   group: TaxGroup
+  vatPayer?: boolean
+  localEpRatePercent?: number | null
   regDate: string
   kveds?: string[]
 }
@@ -30,6 +32,14 @@ export async function updatePreferences(payload: {
   subscriptionTier?: SubscriptionTier
 }): Promise<Entrepreneur> {
   const res = await client.patch<Entrepreneur>('/api/entrepreneur/preferences', payload)
+  return res.data
+}
+
+export async function updateTaxProfile(payload: {
+  vatPayer?: boolean
+  localEpRatePercent?: number | null
+}): Promise<Entrepreneur> {
+  const res = await client.patch<Entrepreneur>('/api/entrepreneur/tax-profile', payload)
   return res.data
 }
 

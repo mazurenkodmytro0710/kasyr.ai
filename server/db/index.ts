@@ -34,6 +34,8 @@ export function initDb() {
       full_name TEXT NOT NULL DEFAULT '',
       tax_id TEXT NOT NULL DEFAULT '',
       "group" INTEGER NOT NULL DEFAULT 3,
+      vat_payer INTEGER NOT NULL DEFAULT 0,
+      local_ep_rate_percent REAL,
       reg_date TEXT NOT NULL DEFAULT '',
       kveds TEXT NOT NULL DEFAULT '[]',
       subscription_tier TEXT NOT NULL DEFAULT 'free',
@@ -100,8 +102,17 @@ export function initDb() {
   `)
 
   ensureColumn('entrepreneurs', "subscription_tier TEXT NOT NULL DEFAULT 'free'", 'subscription_tier')
+  ensureColumn('entrepreneurs', 'vat_payer INTEGER NOT NULL DEFAULT 0', 'vat_payer')
+  ensureColumn('entrepreneurs', 'local_ep_rate_percent REAL', 'local_ep_rate_percent')
   ensureColumn('entrepreneurs', 'telegram_chat_id TEXT', 'telegram_chat_id')
   ensureColumn('entrepreneurs', 'telegram_link_token TEXT', 'telegram_link_token')
   ensureColumn('entrepreneurs', 'email_notifications INTEGER NOT NULL DEFAULT 1', 'email_notifications')
   ensureColumn('entrepreneurs', 'telegram_notifications INTEGER NOT NULL DEFAULT 0', 'telegram_notifications')
+  ensureColumn('entrepreneurs', 'subscription_expires_at TEXT', 'subscription_expires_at')
+  ensureColumn('entrepreneurs', 'wayforpay_token TEXT', 'wayforpay_token')
+  // users new columns
+  ensureColumn('users', 'is_verified INTEGER NOT NULL DEFAULT 0', 'is_verified')
+  ensureColumn('users', 'verification_token TEXT', 'verification_token')
+  ensureColumn('users', 'reset_password_token TEXT', 'reset_password_token')
+  ensureColumn('users', 'reset_password_expiry TEXT', 'reset_password_expiry')
 }

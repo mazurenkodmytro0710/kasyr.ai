@@ -12,16 +12,36 @@ const typeLabels: Record<string, string> = {
   ep_payment: 'Сплата ЄП',
   esv: 'ЄСВ',
   vz: 'Військовий збір',
-  combined_report: 'Квартальний звіт',
+  combined_report: 'Податковий розрахунок',
 }
 
 const filters = ['Всі', 'Майбутні', 'Прострочені', 'Сплачені']
 
 function StatusBadge({ status, daysLeft }: { status: DeadlineStatus; daysLeft: number }) {
-  if (status === 'paid') return <Badge tone="income" dot>Сплачено</Badge>
-  if (status === 'submitted') return <Badge tone="income" dot>Подано</Badge>
-  if (status === 'overdue' || (status === 'pending' && daysLeft < 0)) return <Badge tone="danger" dot>Прострочено</Badge>
-  if (daysLeft <= 7) return <Badge tone="warn" dot>{daysLeft} днів</Badge>
+  if (status === 'paid')
+    return (
+      <Badge tone="income" dot>
+        Сплачено
+      </Badge>
+    )
+  if (status === 'submitted')
+    return (
+      <Badge tone="income" dot>
+        Подано
+      </Badge>
+    )
+  if (status === 'overdue' || (status === 'pending' && daysLeft < 0))
+    return (
+      <Badge tone="danger" dot>
+        Прострочено
+      </Badge>
+    )
+  if (daysLeft <= 7)
+    return (
+      <Badge tone="warn" dot>
+        {daysLeft} днів
+      </Badge>
+    )
   return <Badge tone="neutral">{daysLeft} днів</Badge>
 }
 
@@ -29,25 +49,39 @@ export function Deadlines() {
   const currentYear = new Date().getFullYear()
   const yearOptions = [currentYear, currentYear + 1]
   const [selectedYear, setSelectedYear] = useState(currentYear)
-  const [activeFilter, setActiveFilter] = useState('Всі')
+  const [activeFilter, setActiveFilter] = useState('Майбутні')
   const { deadlines, isDeadlinesLoading, fetchDeadlines, updateDeadlineStatus } = useUserStore()
 
   useEffect(() => {
     fetchDeadlines(selectedYear)
   }, [fetchDeadlines, selectedYear])
 
-  const filtered = useMemo(() => deadlines.filter((deadline) => {
-    const days = daysUntil(deadline.dueDate)
-    if (activeFilter === 'Майбутні') return deadline.status === 'pending' && days >= 0
-    if (activeFilter === 'Прострочені') return deadline.status === 'pending' && days < 0
-    if (activeFilter === 'Сплачені') return deadline.status === 'paid' || deadline.status === 'submitted'
-    return true
-  }), [deadlines, activeFilter])
+  const filtered = useMemo(
+    () =>
+      deadlines.filter((deadline) => {
+        const days = daysUntil(deadline.dueDate)
+        if (activeFilter === 'Майбутні') return deadline.status === 'pending' && days >= 0
+        if (activeFilter === 'Прострочені')
+          return deadline.status === 'overdue' || (deadline.status === 'pending' && days < 0)
+        if (activeFilter === 'Сплачені')
+          return deadline.status === 'paid' || deadline.status === 'submitted'
+        return true
+      }),
+    [deadlines, activeFilter],
+  )
 
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: '24px 20px 104px', maxWidth: 960 }}>
       <div style={{ marginBottom: 24 }}>
-        <h1 style={{ fontSize: 30, fontWeight: 700, letterSpacing: '-0.03em', margin: 0, color: 'var(--text)' }}>
+        <h1
+          style={{
+            fontSize: 30,
+            fontWeight: 700,
+            letterSpacing: '-0.03em',
+            margin: 0,
+            color: 'var(--text)',
+          }}
+        >
           Дедлайни
         </h1>
         <p style={{ margin: '6px 0 0', fontSize: 13, color: 'var(--text-3)' }}>
@@ -66,7 +100,10 @@ export function Deadlines() {
               cursor: 'pointer',
               background: selectedYear === year ? 'var(--indigo-glow)' : 'var(--surface-2)',
               color: selectedYear === year ? 'var(--indigo-300)' : 'var(--text-2)',
-              border: selectedYear === year ? '1px solid rgba(129,140,248,0.3)' : '1px solid var(--border)',
+              border:
+                selectedYear === year
+                  ? '1px solid rgba(129,140,248,0.3)'
+                  : '1px solid var(--border)',
               fontSize: 13,
               fontWeight: 600,
               fontFamily: 'var(--font-sans)',
@@ -88,7 +125,10 @@ export function Deadlines() {
               cursor: 'pointer',
               background: activeFilter === filter ? 'var(--indigo-glow)' : 'var(--surface-2)',
               color: activeFilter === filter ? 'var(--indigo-300)' : 'var(--text-2)',
-              border: activeFilter === filter ? '1px solid rgba(129,140,248,0.3)' : '1px solid var(--border)',
+              border:
+                activeFilter === filter
+                  ? '1px solid rgba(129,140,248,0.3)'
+                  : '1px solid var(--border)',
               fontSize: 13,
               fontWeight: 500,
               fontFamily: 'var(--font-sans)',
@@ -106,7 +146,16 @@ export function Deadlines() {
       ) : (
         <div style={{ display: 'grid', gap: 10 }}>
           {filtered.length === 0 && (
-            <div style={{ padding: 30, borderRadius: 18, background: 'var(--surface)', border: '1px solid var(--border)', textAlign: 'center', color: 'var(--text-3)' }}>
+            <div
+              style={{
+                padding: 30,
+                borderRadius: 18,
+                background: 'var(--surface)',
+                border: '1px solid var(--border)',
+                textAlign: 'center',
+                color: 'var(--text-3)',
+              }}
+            >
               Немає дедлайнів для цього фільтра.
             </div>
           )}
@@ -165,7 +214,10 @@ export function Deadlines() {
                 </div>
 
                 {deadline.amount != null && deadline.amount > 0 && (
-                  <div className="tnum" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>
+                  <div
+                    className="tnum"
+                    style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}
+                  >
                     {formatNumber(deadline.amount)} ₴
                   </div>
                 )}
@@ -173,10 +225,14 @@ export function Deadlines() {
                 <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginLeft: 'auto' }}>
                   <StatusBadge status={deadline.status} daysLeft={days} />
                   {!done && (
-                    <Button variant="secondary" size="sm" onClick={async () => {
-                      await updateDeadlineStatus(deadline.id, 'paid')
-                      await fetchDeadlines(selectedYear)
-                    }}>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={async () => {
+                        await updateDeadlineStatus(deadline.id, 'paid')
+                        await fetchDeadlines(selectedYear)
+                      }}
+                    >
                       Сплачено
                     </Button>
                   )}

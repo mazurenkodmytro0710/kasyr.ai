@@ -3,7 +3,7 @@ import { and, desc, eq, gte, inArray, lte } from 'drizzle-orm'
 import { db } from '../db'
 import { bankAccounts, entrepreneurs, reports, transactions } from '../db/schema'
 import { authMiddleware, type AuthRequest } from '../middleware/auth'
-import { getQuarterBounds } from '../services/taxService'
+import { getQuarterBounds, getTaxProfile } from '../services/taxService'
 import { generateIncomeBookPdf, generateQuarterReportPdf } from '../services/pdfService'
 
 const router = Router()
@@ -39,7 +39,7 @@ router.post('/generate', async (req: AuthRequest, res, next) => {
       .values({
         entrepreneurId: entrepreneur.id,
         period,
-        type: type ?? 'ep_declaration',
+        type: type ?? 'financial_report',
         status: 'draft',
         fileUrl: null,
         submittedAt: null,
@@ -104,12 +104,13 @@ router.get('/book', async (req: AuthRequest, res, next) => {
         ))
       : []
 
-    const pdfBuffer = await generateIncomeBookPdf(
+    const pdfBuffer = await generateIncomeBookPdf({
       txList,
-      entrepreneur.fullName || 'ФОП',
-      entrepreneur.taxId || '',
+      entrepreneurName: entrepreneur.fullName || 'ФОП',
+      taxId: entrepreneur.taxId || '',
+      taxProfile: getTaxProfile(entrepreneur),
       period,
-    )
+    })
 
     res.setHeader('Content-Type', 'application/pdf')
     res.setHeader('Content-Disposition', `attachment; filename="book-${period}.pdf"`)
@@ -148,10 +149,16 @@ router.get('/pdf', async (req: AuthRequest, res, next) => {
         ))
       : []
 
-    const pdfBuffer = await generateQuarterReportPdf(txList, entrepreneur.fullName || 'ФОП', period)
+    const pdfBuffer = await generateQuarterReportPdf({
+      txList,
+      entrepreneurName: entrepreneur.fullName || 'ФОП',
+      taxId: entrepreneur.taxId || '',
+      taxProfile: getTaxProfile(entrepreneur),
+      period,
+    })
 
     res.setHeader('Content-Type', 'application/pdf')
-    res.setHeader('Content-Disposition', `attachment; filename="report-${period}.pdf"`)
+    res.setHeader('Content-Disposition', `attachment; filename="financial-report-${period}.pdf"`)
     res.send(pdfBuffer)
   } catch (error) {
     next(error)

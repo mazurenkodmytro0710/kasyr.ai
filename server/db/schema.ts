@@ -5,6 +5,10 @@ export const users = sqliteTable('users', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   email: text('email').notNull().unique(),
   passwordHash: text('password_hash').notNull(),
+  isVerified: integer('is_verified', { mode: 'boolean' }).notNull().default(false),
+  verificationToken: text('verification_token'),
+  resetPasswordToken: text('reset_password_token'),
+  resetPasswordExpiry: text('reset_password_expiry'),
   createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
 })
 
@@ -14,6 +18,8 @@ export const entrepreneurs = sqliteTable('entrepreneurs', {
   fullName: text('full_name').notNull().default(''),
   taxId: text('tax_id').notNull().default(''),
   group: integer('group').notNull().default(3),
+  vatPayer: integer('vat_payer', { mode: 'boolean' }).notNull().default(false),
+  localEpRatePercent: real('local_ep_rate_percent'),
   regDate: text('reg_date').notNull().default(''),
   kveds: text('kveds').notNull().default('[]'),
   subscriptionTier: text('subscription_tier').notNull().default('free'),
@@ -21,6 +27,8 @@ export const entrepreneurs = sqliteTable('entrepreneurs', {
   telegramLinkToken: text('telegram_link_token'),
   emailNotifications: integer('email_notifications', { mode: 'boolean' }).notNull().default(true),
   telegramNotifications: integer('telegram_notifications', { mode: 'boolean' }).notNull().default(false),
+  subscriptionExpiresAt: text('subscription_expires_at'),
+  wayforpayToken: text('wayforpay_token'),
 })
 
 export const bankAccounts = sqliteTable('bank_accounts', {

@@ -1,7 +1,7 @@
 import { useNavigate, useLocation } from 'react-router-dom'
 import {
-  LayoutDashboard, ArrowLeftRight, BookOpen, FileText,
-  Building2, Calendar, Settings, HelpCircle, LogOut,
+  LayoutDashboard, ArrowLeftRight, FileText,
+  Calendar, Settings, HelpCircle, LogOut, MessageSquare,
   type LucideIcon,
 } from 'lucide-react'
 import { Logo } from '../ui/Logo'
@@ -21,15 +21,14 @@ const sections: { title: string; items: NavItem[] }[] = [
     title: 'ГОЛОВНЕ',
     items: [
       { key: 'home', label: 'Огляд', path: '/dashboard', Icon: LayoutDashboard },
-      { key: 'tx', label: 'Транзакції', path: '/transactions', Icon: ArrowLeftRight, badge: '3', badgeTone: 'neutral' },
-      { key: 'book', label: 'Книга обліку', path: '/transactions', Icon: BookOpen },
+      { key: 'tx', label: 'Транзакції', path: '/transactions', Icon: ArrowLeftRight },
       { key: 'reports', label: 'Звіти', path: '/reports', Icon: FileText },
+      { key: 'feedback', label: 'Зворотній зв\'язок', path: '/feedback', Icon: MessageSquare },
     ],
   },
   {
     title: 'ФІНАНСИ',
     items: [
-      { key: 'banks', label: 'Рахунки', path: '/settings', Icon: Building2 },
       { key: 'deadlines', label: 'Дедлайни', path: '/deadlines', Icon: Calendar, badge: '19д', badgeTone: 'warn' },
     ],
   },
@@ -170,7 +169,7 @@ export function Sidebar() {
           </div>
         </div>
         <button
-          onClick={async () => { await logout(); navigate('/onboarding') }}
+          onClick={async () => { await logout(); navigate('/') }}
           style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: 'var(--text-3)' }}
         >
           <LogOut size={16} />

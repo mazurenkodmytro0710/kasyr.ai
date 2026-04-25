@@ -9,8 +9,13 @@ const client = axios.create({
 client.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401 && !window.location.pathname.startsWith('/onboarding')) {
-      window.location.href = '/onboarding'
+    if (error.response?.status === 401 && typeof window !== 'undefined') {
+      const pathname = window.location.pathname
+      const isPublicRoute = pathname === '/' || pathname.startsWith('/onboarding')
+
+      if (!isPublicRoute) {
+        window.location.href = '/'
+      }
     }
     return Promise.reject(error)
   }

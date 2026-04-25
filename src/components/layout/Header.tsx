@@ -15,9 +15,20 @@ function Avatar({ text }: { text: string }) {
   )
 }
 
-function IconBtn({ children, dot, onClick }: { children: React.ReactNode; dot?: boolean; onClick?: () => void }) {
+function IconBtn({
+  children,
+  dot,
+  onClick,
+  type = 'button',
+}: {
+  children: React.ReactNode
+  dot?: boolean
+  onClick?: () => void
+  type?: 'button' | 'submit' | 'reset'
+}) {
   return (
     <button
+      type={type}
       onClick={onClick}
       style={{
         width: 40, height: 40, borderRadius: 10, border: '1px solid var(--border)',
@@ -65,8 +76,12 @@ export function Header() {
         </div>
       </div>
       <div style={{ display: 'flex', gap: 6 }}>
-        <IconBtn dot><Bell size={18} /></IconBtn>
-        <IconBtn onClick={() => navigate('/settings')}><Settings size={18} /></IconBtn>
+        <IconBtn type="button" dot onClick={() => navigate('/settings?tab=notifications')}>
+          <Bell size={18} />
+        </IconBtn>
+        <IconBtn type="button" onClick={() => navigate('/settings')}>
+          <Settings size={18} />
+        </IconBtn>
       </div>
     </header>
   )

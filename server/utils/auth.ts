@@ -46,7 +46,9 @@ export function setAuthCookie(res: Response, token: string) {
 }
 
 export function clearAuthCookie(res: Response) {
-  res.clearCookie(AUTH_COOKIE_NAME, cookieBaseOptions())
+  const { maxAge, ...clearOptions } = cookieBaseOptions()
+  void maxAge
+  res.clearCookie(AUTH_COOKIE_NAME, clearOptions)
 }
 
 export function readBearerToken(header?: string | null): string | null {

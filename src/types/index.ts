@@ -4,6 +4,7 @@ export type SubscriptionTier = 'free' | 'pro' | 'business'
 export interface User {
   id: number
   email: string
+  isVerified: boolean
   createdAt: string
 }
 
@@ -13,6 +14,8 @@ export interface Entrepreneur {
   fullName: string
   taxId: string
   group: TaxGroup
+  vatPayer: boolean
+  localEpRatePercent: number | null
   regDate: string
   kveds: string[]
   subscriptionTier: SubscriptionTier
@@ -63,12 +66,7 @@ export interface Client {
   country: string
 }
 
-export type DeadlineType =
-  | 'ep_declaration'
-  | 'ep_payment'
-  | 'esv'
-  | 'vz'
-  | 'combined_report'
+export type DeadlineType = 'ep_declaration' | 'ep_payment' | 'esv' | 'vz' | 'combined_report'
 
 export type DeadlineStatus = 'pending' | 'paid' | 'overdue' | 'submitted'
 
@@ -113,7 +111,16 @@ export interface DashboardData {
   quarterIncome: { uah: number; usd: number }
   monthlyChart: { month: string; amount: number }[]
   recentTransactions: Transaction[]
+  totalTransactionCount: number
   bookStatus: { isUpToDate: boolean; pendingCount: number; lastSyncAt: string | null }
+  incomeLimit?: {
+    year: number
+    amount: number
+    used: number
+    usagePercent: number
+    isNearLimit: boolean
+  } | null
+  legalNotes?: string[]
 }
 
 export interface AuthState {

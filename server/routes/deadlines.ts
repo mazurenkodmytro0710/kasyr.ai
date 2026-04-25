@@ -1,9 +1,10 @@
 import { Router } from 'express'
-import { and, asc, eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { db } from '../db'
 import { deadlines, entrepreneurs } from '../db/schema'
 import { authMiddleware, type AuthRequest } from '../middleware/auth'
-import { generateDeadlinesForYears, type TaxGroup } from '../services/taxService'
+import { getTaxProfile } from '../services/taxService'
+import { syncDeadlinesForEntrepreneur } from '../services/deadlinesService'
 
 const router = Router()
 router.use(authMiddleware)
@@ -20,27 +21,11 @@ router.get('/', async (req: AuthRequest, res, next) => {
     const [entrepreneur] = await db.select().from(entrepreneurs).where(eq(entrepreneurs.userId, req.userId!))
     if (!entrepreneur) return res.json([])
 
-    let rows = await db
-      .select()
-      .from(deadlines)
-      .where(eq(deadlines.entrepreneurId, entrepreneur.id))
-      .orderBy(asc(deadlines.dueDate))
-
-    if (rows.length === 0) {
-      const generated = generateDeadlinesForYears(
-        entrepreneur.id,
-        entrepreneur.group as TaxGroup,
-        [currentYear, currentYear + 1],
-      )
-      if (generated.length > 0) {
-        await db.insert(deadlines).values(generated)
-        rows = await db
-          .select()
-          .from(deadlines)
-          .where(eq(deadlines.entrepreneurId, entrepreneur.id))
-          .orderBy(asc(deadlines.dueDate))
-      }
-    }
+    const rows = await syncDeadlinesForEntrepreneur(
+      entrepreneur.id,
+      getTaxProfile(entrepreneur),
+      [currentYear, currentYear + 1],
+    )
 
     res.json(rows.filter((deadline) => deadline.period.endsWith(String(year))))
   } catch (error) {

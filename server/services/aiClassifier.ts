@@ -1,4 +1,4 @@
-import OpenAI from 'openai'
+import { aiComplete } from '../utils/aiClient'
 
 export type AiCategory = 'income' | 'expense' | 'transfer' | 'unclassified'
 
@@ -14,7 +14,7 @@ function normalizeCategory(value: string): AiCategory {
   return categories.find((category) => category === clean) ?? 'unclassified'
 }
 
-function classifyByRules(description: string, amount: number): AiClassification {
+export function classifyByRules(description: string, amount: number): AiClassification {
   const text = description.toLowerCase()
   if (text.includes('коміс') || text.includes('fee')) {
     return { category: 'expense', reason: 'Схоже на банківську або платіжну комісію.' }
@@ -28,7 +28,7 @@ function classifyByRules(description: string, amount: number): AiClassification 
   if (amount > 0 && (text.includes('invoice') || text.includes('payout') || text.includes('оплата'))) {
     return { category: 'income', reason: 'Схоже на оплату від клієнта.' }
   }
-  return { category: amount > 0 ? 'income' : 'expense', reason: 'Автоматична класифікація за базовими правилами MVP.' }
+  return { category: amount > 0 ? 'income' : 'expense', reason: 'Автоматична класифікація за базовими правилами.' }
 }
 
 export async function classifyWithAI(
@@ -37,13 +37,10 @@ export async function classifyWithAI(
   currency: string,
   history = 'немає',
 ): Promise<AiClassification> {
-  const apiKey = process.env.OPENAI_API_KEY
-  if (!apiKey) return classifyByRules(description, amount)
+  const hasAnyKey = Boolean(process.env.GROK_API_KEY)
+  if (!hasAnyKey) return classifyByRules(description, amount)
 
-  const openai = new OpenAI({ apiKey })
-  const model = process.env.OPENAI_MODEL ?? 'gpt-4o-mini'
-  const prompt = `
-Ти — бухгалтер для українського ФОП.
+  const prompt = `Ти — бухгалтер для українського ФОП.
 Класифікуй транзакцію в одну з категорій:
 - income: оплата від клієнта за послуги/товари
 - expense: витрата, повернення коштів, банківська комісія
@@ -53,20 +50,18 @@ export async function classifyWithAI(
 Транзакція: ${description}, сума: ${amount} ${currency}
 Попередні класифікації цього контрагента: ${history}
 
-Відповідь: тільки одне слово (категорія)
-`
+Відповідь: тільки одне слово (категорія)`
 
-  try {
-    const completion = await openai.chat.completions.create({
-      model,
-      max_tokens: 10,
-      messages: [{ role: 'user', content: prompt }],
-    })
+  const { text, provider } = await aiComplete(
+    [{ role: 'user', content: prompt }],
+    10,
+  )
 
-    const category = normalizeCategory(completion.choices[0]?.message?.content ?? '')
-    return { category, reason: `OpenAI класифікація транзакції (${model}).` }
-  } catch (error) {
-    console.warn('OpenAI classification failed, falling back to local rules:', error)
+  if (!text) {
+    console.warn('[classify] No AI response (Grok may need credits), falling back to rules')
     return classifyByRules(description, amount)
   }
+
+  const category = normalizeCategory(text)
+  return { category, reason: `AI класифікація (${provider}).` }
 }

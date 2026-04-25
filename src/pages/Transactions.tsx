@@ -43,13 +43,6 @@ async function downloadBookPdf(period: string) {
   URL.revokeObjectURL(url)
 }
 
-function categoryLabel(category: TransactionCategory): string {
-  if (category === 'income') return 'Дохід'
-  if (['expense', 'fee', 'return'].includes(category)) return 'Витрата'
-  if (['transfer', 'own_transfer'].includes(category)) return 'Переказ'
-  return 'Без класифікації'
-}
-
 function normalizeCategory(category: string): TransactionCategory {
   if (category === 'fee' || category === 'return') return 'expense'
   if (category === 'own_transfer') return 'transfer'
@@ -84,6 +77,19 @@ export function Transactions() {
   const totalIncome = useMemo(() => (
     incomeRows.reduce((sum, transaction) => sum + transaction.amount, 0)
   ), [incomeRows])
+
+  const expenseRows = useMemo(() => (
+    transactions.filter((transaction) => ['expense', 'fee', 'return'].includes(transaction.category) || transaction.amount < 0)
+  ), [transactions])
+
+  const totalExpense = useMemo(() => (
+    expenseRows.reduce((sum, transaction) => sum + Math.abs(transaction.amount), 0)
+  ), [expenseRows])
+
+  const isVatBook = entrepreneur?.group === 3 && entrepreneur?.vatPayer
+  const bookRows = useMemo(() => (
+    isVatBook ? [...incomeRows, ...expenseRows].sort((left, right) => left.date.localeCompare(right.date)) : incomeRows
+  ), [expenseRows, incomeRows, isVatBook])
 
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: '24px 20px 112px', maxWidth: 1240 }}>
@@ -227,32 +233,30 @@ export function Transactions() {
                           </div>
                         </td>
                         <td style={{ padding: '14px 16px' }}>
-                          {entrepreneur?.subscriptionTier === 'free' ? (
-                            <select
-                              value={normalizeCategory(transaction.category)}
-                              onChange={(event) => updateTransaction(transaction.id, { category: event.target.value as TransactionCategory })}
-                              style={{
-                                width: 170,
-                                height: 36,
-                                background: 'var(--surface-2)',
-                                border: '1px solid var(--border)',
-                                borderRadius: 10,
-                                color: 'var(--text)',
-                                fontFamily: 'var(--font-sans)',
-                                fontSize: 13,
-                                padding: '0 12px',
-                              }}
-                            >
-                              <option value="income">Дохід</option>
-                              <option value="expense">Витрата</option>
-                              <option value="transfer">Переказ</option>
-                              <option value="unclassified">Без класифікації</option>
-                            </select>
-                          ) : (
-                            <Badge tone={transaction.category === 'income' ? 'income' : transaction.category === 'unclassified' ? 'warn' : 'neutral'}>
-                              {categoryLabel(transaction.category)}
-                            </Badge>
-                          )}
+                          <select
+                            value={normalizeCategory(transaction.category)}
+                            onChange={(event) =>
+                              updateTransaction(transaction.id, {
+                                category: event.target.value as TransactionCategory,
+                              })
+                            }
+                            style={{
+                              width: 170,
+                              height: 36,
+                              background: 'var(--surface-2)',
+                              border: '1px solid var(--border)',
+                              borderRadius: 10,
+                              color: 'var(--text)',
+                              fontFamily: 'var(--font-sans)',
+                              fontSize: 13,
+                              padding: '0 12px',
+                            }}
+                          >
+                            <option value="income">Дохід</option>
+                            <option value="expense">Витрата</option>
+                            <option value="transfer">Переказ</option>
+                            <option value="unclassified">Без класифікації</option>
+                          </select>
                         </td>
                         <td style={{ padding: '14px 16px', textAlign: 'right' }} className="tnum">
                           <div style={{ fontSize: 14, fontWeight: 700, color: transaction.category === 'income' ? 'var(--text)' : transaction.category === 'unclassified' ? 'var(--warn)' : 'var(--danger)' }}>
@@ -294,9 +298,11 @@ export function Transactions() {
         <div style={{ display: 'grid', gap: 16 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
             <div>
-              <h2 style={{ margin: 0, fontSize: 20, fontWeight: 600, color: 'var(--text)' }}>Книга обліку</h2>
+              <h2 style={{ margin: 0, fontSize: 20, fontWeight: 600, color: 'var(--text)' }}>
+                {isVatBook ? 'Облік доходів і витрат' : 'Книга обліку'}
+              </h2>
               <p style={{ margin: '6px 0 0', fontSize: 13, color: 'var(--text-3)' }}>
-                PDF-готовий вигляд для експорту та перевірки доходів
+                Допоміжний PDF за даними Kasyr.ai. Перед використанням звір записи з первинними документами.
               </p>
             </div>
             <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -344,16 +350,16 @@ export function Transactions() {
               </div>
             </div>
             <div style={{ padding: 18, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16 }}>
-              <div className="label">Записів доходу</div>
+              <div className="label">{isVatBook ? 'Витрати / списання' : 'Записів доходу'}</div>
               <div className="tnum" style={{ marginTop: 8, fontSize: 28, fontWeight: 800, color: 'var(--text)' }}>
-                {incomeRows.length}
+                {isVatBook ? `${formatNumber(totalExpense)} ₴` : incomeRows.length}
               </div>
             </div>
             <div style={{ padding: 18, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16 }}>
               <div className="label">Статус</div>
               <div style={{ marginTop: 10 }}>
-                <Badge tone={incomeRows.length > 0 ? 'income' : 'neutral'} dot>
-                  {incomeRows.length > 0 ? 'Готово до експорту' : 'Очікує дані'}
+                <Badge tone={bookRows.length > 0 ? 'income' : 'neutral'} dot>
+                  {bookRows.length > 0 ? 'Готово до експорту' : 'Очікує дані'}
                 </Badge>
               </div>
             </div>
@@ -363,16 +369,16 @@ export function Transactions() {
             <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--border)' }}>
               <div className="label">PDF preview</div>
             </div>
-            {incomeRows.length === 0 ? (
+            {bookRows.length === 0 ? (
               <div style={{ padding: 28, fontSize: 14, color: 'var(--text-3)' }}>
-                Додай або синхронізуй доходи, щоб сформувати книгу обліку.
+                Додай або синхронізуй транзакції, щоб сформувати документ обліку.
               </div>
             ) : (
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 680 }}>
                   <thead>
                     <tr style={{ background: 'var(--surface-2)' }}>
-                      {['№', 'Дата', 'Опис', 'Сума', 'Валюта'].map((header) => (
+                      {(isVatBook ? ['№', 'Дата', 'Опис', 'Дохід', 'Витрати'] : ['№', 'Дата', 'Опис', 'Сума', 'Валюта']).map((header) => (
                         <th key={header} style={{ padding: '10px 16px', textAlign: 'left', fontSize: 11, color: 'var(--text-3)', textTransform: 'uppercase', borderBottom: '1px solid var(--border)' }}>
                           {header}
                         </th>
@@ -380,15 +386,28 @@ export function Transactions() {
                     </tr>
                   </thead>
                   <tbody>
-                    {incomeRows.map((transaction, index) => (
+                    {bookRows.map((transaction, index) => (
                       <tr key={transaction.id} style={{ borderBottom: '1px solid var(--surface-2)' }}>
                         <td style={{ padding: '12px 16px', fontSize: 13, color: 'var(--text-2)' }}>{index + 1}</td>
                         <td style={{ padding: '12px 16px', fontSize: 13, color: 'var(--text-2)' }}>{new Date(transaction.date).toLocaleDateString('uk-UA')}</td>
                         <td style={{ padding: '12px 16px', fontSize: 13, color: 'var(--text)' }}>{transaction.description}</td>
-                        <td style={{ padding: '12px 16px', fontSize: 13, color: 'var(--text)', fontWeight: 600 }} className="tnum">
-                          {formatNumber(transaction.amount)} ₴
-                        </td>
-                        <td style={{ padding: '12px 16px', fontSize: 13, color: 'var(--text-2)' }}>{transaction.currency}</td>
+                        {isVatBook ? (
+                          <>
+                            <td style={{ padding: '12px 16px', fontSize: 13, color: 'var(--text)', fontWeight: 600 }} className="tnum">
+                              {transaction.category === 'income' ? `${formatNumber(transaction.amount)} ₴` : '—'}
+                            </td>
+                            <td style={{ padding: '12px 16px', fontSize: 13, color: 'var(--danger)', fontWeight: 600 }} className="tnum">
+                              {transaction.category !== 'income' ? `${formatNumber(Math.abs(transaction.amount))} ₴` : '—'}
+                            </td>
+                          </>
+                        ) : (
+                          <>
+                            <td style={{ padding: '12px 16px', fontSize: 13, color: 'var(--text)', fontWeight: 600 }} className="tnum">
+                              {formatNumber(transaction.amount)} ₴
+                            </td>
+                            <td style={{ padding: '12px 16px', fontSize: 13, color: 'var(--text-2)' }}>{transaction.currency}</td>
+                          </>
+                        )}
                       </tr>
                     ))}
                   </tbody>

@@ -123,7 +123,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
       set({
         user: data.user,
         entrepreneur: data.entrepreneur,
-        isAuthenticated: true,
+        isAuthenticated: Boolean(data.user),
         hasInitialized: true,
       })
     } catch {
